@@ -29,6 +29,7 @@ import {
 
 const { width } = Dimensions.get("window");
 const CARD_WIDTH = (width - 52) / 2;
+const TRASH_RETENTION_DAYS = 30;
 
 // ============ Palette ============
 const NOTE_COLORS = [
@@ -104,30 +105,26 @@ const darkTheme = {
   danger: "#FF453A",
 };
 
-// ============ Haptic Helper ============
+// ============ Haptic ============
 const triggerHaptic = (type = "light") => {
   try {
-    if (type === "light") {
+    if (type === "light")
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    } else if (type === "medium") {
+    else if (type === "medium")
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    } else if (type === "heavy") {
+    else if (type === "heavy")
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-    } else if (type === "success") {
+    else if (type === "success")
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    } else if (type === "warning") {
+    else if (type === "warning")
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-    } else if (type === "error") {
+    else if (type === "error")
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-    }
     if (Platform.OS === "android") {
-      if (type === "medium" || type === "heavy" || type === "warning") {
+      if (type === "medium" || type === "heavy" || type === "warning")
         Vibration.vibrate(30);
-      } else if (type === "success") {
-        Vibration.vibrate([0, 20, 40, 20]);
-      } else {
-        Vibration.vibrate(15);
-      }
+      else if (type === "success") Vibration.vibrate([0, 20, 40, 20]);
+      else Vibration.vibrate(15);
     }
   } catch (e) {}
 };
@@ -353,7 +350,132 @@ function NoteCard({
   );
 }
 
-// ============ Static styles for card/skeleton ============
+// ============ Trash Card (List row style) ============
+function TrashCard({
+  item,
+  theme,
+  styles,
+  fontScale,
+  onRestore,
+  onDeletePermanent,
+  formatRelative,
+}) {
+  const palette = NOTE_COLORS[item.colorId ?? 0];
+
+  return (
+    <View
+      style={[
+        styles.trashCard,
+        { backgroundColor: theme.bgElevated, borderColor: theme.border },
+      ]}
+    >
+      {/* Color accent bar */}
+      <View style={[styles.trashAccent, { backgroundColor: palette.bar }]} />
+
+      <View style={styles.trashContent}>
+        {/* Title row */}
+        <View style={styles.trashHeader}>
+          <View style={[styles.trashDot, { backgroundColor: palette.bar }]} />
+          <Text
+            style={[
+              styles.trashTitle,
+              { fontSize: 15 * fontScale, color: theme.text },
+            ]}
+            numberOfLines={1}
+          >
+            {item.title}
+          </Text>
+        </View>
+
+        {/* Preview */}
+        {item.content ? (
+          <Text
+            style={[
+              styles.trashPreview,
+              { fontSize: 13 * fontScale, color: theme.subText },
+            ]}
+            numberOfLines={2}
+          >
+            {item.content}
+          </Text>
+        ) : (
+          <Text
+            style={[
+              styles.trashPreview,
+              {
+                fontSize: 13 * fontScale,
+                color: theme.hint,
+                fontStyle: "italic",
+              },
+            ]}
+          >
+            No content
+          </Text>
+        )}
+
+        {/* Deleted time */}
+        <View style={styles.trashMetaRow}>
+          <Ionicons name="time-outline" size={12} color={theme.hint} />
+          <Text
+            style={[
+              styles.trashMeta,
+              { fontSize: 11 * fontScale, color: theme.hint },
+            ]}
+          >
+            Deleted {formatRelative(item.deletedAt)}
+          </Text>
+        </View>
+
+        {/* Actions */}
+        <View style={styles.trashActions}>
+          <TouchableOpacity
+            style={[
+              styles.trashBtn,
+              { backgroundColor: "rgba(10,132,255,0.12)" },
+            ]}
+            onPress={onRestore}
+            activeOpacity={0.7}
+          >
+            <Ionicons
+              name="arrow-undo-outline"
+              size={15}
+              color={IOS_BLUE_SOLID}
+            />
+            <Text
+              style={[
+                styles.trashBtnText,
+                { color: IOS_BLUE_SOLID, fontSize: 13 * fontScale },
+              ]}
+            >
+              Restore
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.trashBtn,
+              { backgroundColor: "rgba(255,59,48,0.12)" },
+            ]}
+            onPress={onDeletePermanent}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="close-outline" size={16} color={theme.danger} />
+            <Text
+              style={[
+                styles.trashBtnText,
+                { color: theme.danger, fontSize: 13 * fontScale },
+              ]}
+            >
+              Delete
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </View>
+  );
+}
+
+// ============ Static Styles ============
 const styles = StyleSheet.create({
   cardStatic: {
     borderRadius: 22,
@@ -380,17 +502,9 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     letterSpacing: -0.3,
   },
-  cardContent: {
-    color: "rgba(0,0,0,0.55)",
-    lineHeight: 18,
-    flex: 1,
-  },
+  cardContent: { color: "rgba(0,0,0,0.55)", lineHeight: 18, flex: 1 },
   cardBottom: { marginTop: 10 },
-  cardDate: {
-    color: "rgba(0,0,0,0.4)",
-    fontWeight: "600",
-    letterSpacing: 0.2,
-  },
+  cardDate: { color: "rgba(0,0,0,0.4)", fontWeight: "600", letterSpacing: 0.2 },
   deleteAction: {
     backgroundColor: DANGER_RED,
     justifyContent: "center",
@@ -415,9 +529,30 @@ const styles = StyleSheet.create({
   },
   skeletonDot: { width: 8, height: 8, borderRadius: 4 },
   skeletonLine: { borderRadius: 4 },
+  trashCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginHorizontal: 20,
+    marginBottom: 10,
+    paddingVertical: 14,
+    paddingRight: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    overflow: "hidden",
+  },
+  trashColorBar: { width: 4, alignSelf: "stretch", marginRight: 12 },
+  trashTitle: { fontWeight: "600", color: "#0F0F0F", marginBottom: 3 },
+  trashMeta: { fontWeight: "500", color: "rgba(0,0,0,0.4)" },
+  trashIconBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    justifyContent: "center",
+    alignItems: "center",
+  },
 });
 
-// ============ Settings Row Helpers ============
+// ============ Setting Row ============
 function SettingRow({
   icon,
   label,
@@ -427,6 +562,7 @@ function SettingRow({
   styles,
   isLast,
   danger,
+  badge,
 }) {
   return (
     <TouchableOpacity
@@ -451,6 +587,11 @@ function SettingRow({
         <Text style={[styles.settingLabel, danger && { color: theme.danger }]}>
           {label}
         </Text>
+        {badge ? (
+          <View style={[styles.badge, { backgroundColor: IOS_BLUE_SOLID }]}>
+            <Text style={styles.badgeText}>{badge}</Text>
+          </View>
+        ) : null}
       </View>
       {value ? <Text style={styles.settingValue}>{value}</Text> : null}
       {onPress && !danger && (
@@ -464,6 +605,7 @@ function SettingRow({
 export default function App() {
   const [screen, setScreen] = useState("home");
   const [notes, setNotes] = useState([]);
+  const [trash, setTrash] = useState([]);
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
   const [editingId, setEditingId] = useState(null);
@@ -471,8 +613,8 @@ export default function App() {
   const [colorId, setColorId] = useState(0);
   const [loading, setLoading] = useState(true);
 
-  // Settings state
-  const [themeMode, setThemeMode] = useState("light"); // 'light'|'dark'|'system'
+  // Settings
+  const [themeMode, setThemeMode] = useState("light");
   const [fontSize, setFontSize] = useState("medium");
   const [sortBy, setSortBy] = useState("newest");
   const [confirmDelete, setConfirmDelete] = useState(true);
@@ -481,7 +623,6 @@ export default function App() {
   const systemScheme = useColorScheme();
   const isDark =
     themeMode === "dark" || (themeMode === "system" && systemScheme === "dark");
-
   const theme = isDark ? darkTheme : lightTheme;
   const s = getStyles(theme, isDark);
   const fontScale = (FONT_SIZES.find((f) => f.id === fontSize) || FONT_SIZES[1])
@@ -491,8 +632,9 @@ export default function App() {
   useEffect(() => {
     const init = async () => {
       await loadNotes();
+      await loadTrash();
       await loadSettings();
-      setTimeout(() => setLoading(false), 550);
+      setTimeout(() => setLoading(false), 500);
     };
     init();
   }, []);
@@ -500,6 +642,10 @@ export default function App() {
   useEffect(() => {
     if (!loading) saveNotes(notes);
   }, [notes]);
+
+  useEffect(() => {
+    if (!loading) saveTrash(trash);
+  }, [trash]);
 
   useEffect(() => {
     if (!loading) {
@@ -525,6 +671,27 @@ export default function App() {
     } catch (e) {}
   };
 
+  const loadTrash = async () => {
+    try {
+      const stored = await AsyncStorage.getItem("@trash");
+      let items = stored ? JSON.parse(stored) : [];
+
+      // Auto cleanup: remove items older than 30 days
+      const now = Date.now();
+      const cutoff = TRASH_RETENTION_DAYS * 24 * 60 * 60 * 1000;
+      items = items.filter(
+        (i) => now - new Date(i.deletedAt).getTime() < cutoff,
+      );
+
+      setTrash(items);
+    } catch (e) {}
+  };
+  const saveTrash = async (data) => {
+    try {
+      await AsyncStorage.setItem("@trash", JSON.stringify(data));
+    } catch (e) {}
+  };
+
   const loadSettings = async () => {
     try {
       const stored = await AsyncStorage.getItem("@settings");
@@ -546,7 +713,7 @@ export default function App() {
     } catch (e) {}
   };
 
-  // ============ Actions ============
+  // ============ Note Actions ============
   const handleSave = () => {
     if (title.trim() === "") {
       triggerHaptic("warning");
@@ -565,16 +732,18 @@ export default function App() {
         ),
       );
     } else {
-      const newNote = {
-        id: Date.now().toString(),
-        title,
-        content,
-        colorId,
-        pinned: false,
-        createdAt: now,
-        updatedAt: now,
-      };
-      setNotes([newNote, ...notes]);
+      setNotes([
+        {
+          id: Date.now().toString(),
+          title,
+          content,
+          colorId,
+          pinned: false,
+          createdAt: now,
+          updatedAt: now,
+        },
+        ...notes,
+      ]);
     }
     resetForm();
   };
@@ -596,20 +765,31 @@ export default function App() {
     setScreen("edit");
   };
 
-  const doDelete = (id) => {
+  const moveToTrash = (id) => {
     triggerHaptic("warning");
+    const note = notes.find((n) => n.id === id);
+    if (!note) return;
     setNotes(notes.filter((n) => n.id !== id));
+    setTrash([{ ...note, deletedAt: new Date().toISOString() }, ...trash]);
   };
 
   const requestDelete = (id) => {
     if (!confirmDelete) {
-      doDelete(id);
+      moveToTrash(id);
       return;
     }
-    Alert.alert("Delete note?", "This note will be permanently deleted.", [
-      { text: "Cancel", style: "cancel" },
-      { text: "Delete", style: "destructive", onPress: () => doDelete(id) },
-    ]);
+    Alert.alert(
+      "Move to Trash?",
+      `The note will be kept in Trash for ${TRASH_RETENTION_DAYS} days.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Move to Trash",
+          style: "destructive",
+          onPress: () => moveToTrash(id),
+        },
+      ],
+    );
   };
 
   const togglePin = (id) => {
@@ -617,19 +797,63 @@ export default function App() {
     setNotes(notes.map((n) => (n.id === id ? { ...n, pinned: !n.pinned } : n)));
   };
 
+  // ============ Trash Actions ============
+  const restoreFromTrash = (id) => {
+    triggerHaptic("success");
+    const item = trash.find((t) => t.id === id);
+    if (!item) return;
+    const { deletedAt, ...restored } = item;
+    setTrash(trash.filter((t) => t.id !== id));
+    setNotes([{ ...restored, updatedAt: new Date().toISOString() }, ...notes]);
+  };
+
+  const deletePermanent = (id) => {
+    Alert.alert("Delete permanently?", "This cannot be undone.", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Delete",
+        style: "destructive",
+        onPress: () => {
+          triggerHaptic("error");
+          setTrash(trash.filter((t) => t.id !== id));
+        },
+      },
+    ]);
+  };
+
+  const emptyTrash = () => {
+    Alert.alert(
+      "Empty Trash?",
+      `All ${trash.length} notes will be permanently deleted.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Empty Trash",
+          style: "destructive",
+          onPress: () => {
+            triggerHaptic("error");
+            setTrash([]);
+          },
+        },
+      ],
+    );
+  };
+
   const resetAllData = () => {
     Alert.alert(
-      "Reset all notes?",
-      "This will permanently delete all your notes. This cannot be undone.",
+      "Reset all data?",
+      "All notes and trash will be permanently deleted.",
       [
         { text: "Cancel", style: "cancel" },
         {
           text: "Delete all",
           style: "destructive",
           onPress: async () => {
-            triggerHaptic("warning");
+            triggerHaptic("error");
             setNotes([]);
+            setTrash([]);
             await AsyncStorage.removeItem("@notes");
+            await AsyncStorage.removeItem("@trash");
           },
         },
       ],
@@ -689,10 +913,94 @@ export default function App() {
     if (sortBy === "oldest")
       return new Date(a.updatedAt) - new Date(b.updatedAt);
     if (sortBy === "title") return a.title.localeCompare(b.title);
-    return new Date(b.updatedAt) - new Date(a.updatedAt); // newest
+    return new Date(b.updatedAt) - new Date(a.updatedAt);
   });
 
   const pinnedCount = sortedNotes.filter((n) => n.pinned).length;
+
+  // ============ TRASH SCREEN ============
+  if (screen === "trash") {
+    return (
+      <GestureHandlerRootView style={{ flex: 1 }}>
+        <SafeAreaView style={s.container}>
+          <StatusBar
+            barStyle={isDark ? "light-content" : "dark-content"}
+            backgroundColor={theme.bg}
+          />
+          <View style={s.settingsHeader}>
+            <TouchableOpacity
+              style={s.editorIconBtn}
+              onPress={() => {
+                triggerHaptic("light");
+                setScreen("settings");
+              }}
+              activeOpacity={0.6}
+            >
+              <Ionicons name="chevron-back" size={24} color={theme.text} />
+            </TouchableOpacity>
+            <Text style={s.settingsTitle}>Trash</Text>
+            {trash.length > 0 ? (
+              <TouchableOpacity
+                style={s.editorIconBtn}
+                onPress={emptyTrash}
+                activeOpacity={0.6}
+              >
+                <Ionicons name="trash-outline" size={22} color={theme.danger} />
+              </TouchableOpacity>
+            ) : (
+              <View style={{ width: 44 }} />
+            )}
+          </View>
+
+          {/* Info banner */}
+          <View
+            style={[
+              s.trashBanner,
+              { backgroundColor: theme.bgElevated, borderColor: theme.border },
+            ]}
+          >
+            <View style={s.trashBannerIcon}>
+              <Ionicons name="information-circle" size={16} color="#FFB300" />
+            </View>
+            <Text style={[s.trashBannerText, { color: theme.subText }]}>
+              Notes in Trash are auto-deleted after {TRASH_RETENTION_DAYS} days
+            </Text>
+          </View>
+
+          <FlatList
+            data={trash}
+            keyExtractor={(item) => item.id}
+            contentContainerStyle={{ paddingTop: 12, paddingBottom: 40 }}
+            showsVerticalScrollIndicator={false}
+            renderItem={({ item }) => (
+              <TrashCard
+                item={item}
+                theme={theme}
+                styles={s}
+                fontScale={fontScale}
+                onRestore={() => restoreFromTrash(item.id)}
+                onDeletePermanent={() => deletePermanent(item.id)}
+                formatRelative={formatRelative}
+              />
+            )}
+            ListEmptyComponent={
+              <View style={s.emptyWrap}>
+                <View style={s.emptyIconWrap}>
+                  <Ionicons name="trash-outline" size={38} color={theme.hint} />
+                </View>
+                <Text style={[s.emptyTitle, { fontSize: 19 * fontScale }]}>
+                  Trash is empty
+                </Text>
+                <Text style={[s.emptyText, { fontSize: 14 * fontScale }]}>
+                  Deleted notes will appear here
+                </Text>
+              </View>
+            }
+          />
+        </SafeAreaView>
+      </GestureHandlerRootView>
+    );
+  }
 
   // ============ SETTINGS SCREEN ============
   if (screen === "settings") {
@@ -887,9 +1195,22 @@ export default function App() {
                   thumbColor="#FFFFFF"
                 />
               </View>
+
               <SettingRow
                 icon="trash-outline"
-                label="Reset all notes"
+                label="Trash"
+                badge={trash.length > 0 ? String(trash.length) : null}
+                onPress={() => {
+                  triggerHaptic("light");
+                  setScreen("trash");
+                }}
+                theme={theme}
+                styles={s}
+              />
+
+              <SettingRow
+                icon="refresh-outline"
+                label="Reset all data"
                 onPress={resetAllData}
                 theme={theme}
                 styles={s}
@@ -1284,11 +1605,7 @@ const getStyles = (theme, isDark) =>
       paddingTop: 10,
       paddingBottom: 4,
     },
-    dateText: {
-      fontWeight: "700",
-      color: theme.subText,
-      letterSpacing: 1.2,
-    },
+    dateText: { fontWeight: "700", color: theme.subText, letterSpacing: 1.2 },
     themeBtn: {
       width: 40,
       height: 40,
@@ -1551,5 +1868,115 @@ const getStyles = (theme, isDark) =>
       fontSize: 12,
       marginTop: 32,
       marginBottom: 20,
+    },
+
+    badge: {
+      minWidth: 22,
+      height: 22,
+      borderRadius: 11,
+      paddingHorizontal: 6,
+      justifyContent: "center",
+      alignItems: "center",
+      marginLeft: 4,
+    },
+    badgeText: { color: "#FFFFFF", fontSize: 11, fontWeight: "700" },
+
+    // ---- Trash ----
+    // ---- Trash ----
+    trashBanner: {
+      flexDirection: "row",
+      alignItems: "center",
+      marginHorizontal: 20,
+      marginTop: 8,
+      marginBottom: 4,
+      paddingHorizontal: 14,
+      paddingVertical: 12,
+      borderRadius: 14,
+      borderWidth: 1,
+      gap: 10,
+    },
+    trashBannerIcon: {
+      width: 26,
+      height: 26,
+      borderRadius: 13,
+      backgroundColor: "rgba(255,179,0,0.15)",
+      justifyContent: "center",
+      alignItems: "center",
+    },
+    trashBannerText: {
+      flex: 1,
+      fontSize: 12.5,
+      fontWeight: "500",
+      lineHeight: 17,
+    },
+
+    trashCard: {
+      flexDirection: "row",
+      marginHorizontal: 20,
+      marginBottom: 12,
+      borderRadius: 18,
+      borderWidth: 1,
+      overflow: "hidden",
+      shadowColor: "#000",
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: isDark ? 0.25 : 0.05,
+      shadowRadius: 8,
+      elevation: 2,
+    },
+    trashAccent: {
+      width: 5,
+      alignSelf: "stretch",
+    },
+    trashContent: {
+      flex: 1,
+      padding: 14,
+    },
+    trashHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+      marginBottom: 6,
+    },
+    trashDot: {
+      width: 8,
+      height: 8,
+      borderRadius: 4,
+    },
+    trashTitle: {
+      flex: 1,
+      fontWeight: "700",
+      letterSpacing: -0.2,
+    },
+    trashPreview: {
+      lineHeight: 18,
+      marginBottom: 8,
+      opacity: 0.9,
+    },
+    trashMetaRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 4,
+      marginBottom: 12,
+    },
+    trashMeta: {
+      fontWeight: "500",
+      letterSpacing: 0.2,
+    },
+    trashActions: {
+      flexDirection: "row",
+      gap: 8,
+    },
+    trashBtn: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 5,
+      paddingVertical: 9,
+      paddingHorizontal: 14,
+      borderRadius: 10,
+    },
+    trashBtnText: {
+      fontWeight: "700",
+      letterSpacing: 0.2,
     },
   });
