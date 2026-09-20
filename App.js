@@ -11,49 +11,98 @@ import {
   Alert,
   KeyboardAvoidingView,
   Platform,
+  Dimensions,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
-// ============ iOS Blue Palette ============
-const IOS_BLUE = "#007AFF";
+const { width } = Dimensions.get("window");
+const CARD_WIDTH = (width - 52) / 2;
 
+// ============ Premium Pastel Palette ============
 const NOTE_COLORS = [
-  { bg: "#E8F0FE", bar: "#5B9BF5" }, // blue
-  { bg: "#FCE8E6", bar: "#F26B5E" }, // red
-  { bg: "#E6F4EA", bar: "#4CAF7A" }, // green
-  { bg: "#FEF7E0", bar: "#F4B93E" }, // yellow
-  { bg: "#F3E8FD", bar: "#A876E0" }, // purple
-  { bg: "#F1F3F4", bar: "#9AA0A6" }, // gray
+  {
+    id: 0,
+    bg: "#F5D5D5",
+    darkBg: "#3A2525",
+    bar: "#E8A5A5",
+    label: "Rose",
+  },
+  {
+    id: 1,
+    bg: "#F5E6B8",
+    darkBg: "#3A3325",
+    bar: "#E8CC7A",
+    label: "Honey",
+  },
+  {
+    id: 2,
+    bg: "#D4E8D4",
+    darkBg: "#253A25",
+    bar: "#9ECB9E",
+    label: "Mint",
+  },
+  {
+    id: 3,
+    bg: "#D5E4F0",
+    darkBg: "#25303A",
+    bar: "#9EC2DC",
+    label: "Sky",
+  },
+  {
+    id: 4,
+    bg: "#DDD5F0",
+    darkBg: "#2E253A",
+    bar: "#B5A5DB",
+    label: "Lilac",
+  },
+  {
+    id: 5,
+    bg: "#F5DDD0",
+    darkBg: "#3A2E25",
+    bar: "#E8B79E",
+    label: "Peach",
+  },
 ];
+
+// ============ iOS Blue Gradient ============
+const IOS_BLUE = ["#0A84FF", "#0066CC"];
+const IOS_BLUE_SOLID = "#0A84FF";
 
 // ============ Themes ============
 const lightTheme = {
-  bg: "#FFFFFF",
-  bgSecondary: "#F2F2F7",
+  bg: "#F5F3EE",
+  bgElevated: "#FFFFFF",
   card: "#FFFFFF",
-  text: "#000000",
-  subText: "#6E6E73",
-  hint: "#AEAEB2",
-  border: "#E5E5EA",
-  searchBg: "#F2F2F7",
-  iconBg: "#F2F2F7",
-  iconColor: "#1C1C1E",
-  headerBg: "#FFFFFF",
+  text: "#1A1A1A",
+  subText: "#6B6B6B",
+  hint: "#A0A0A0",
+  border: "rgba(0,0,0,0.06)",
+  searchBg: "#FFFFFF",
+  searchBorder: "rgba(0,0,0,0.05)",
+  iconBg: "rgba(0,0,0,0.05)",
+  iconColor: "#1A1A1A",
+  chipBg: "#EAE6DD",
+  divider: "rgba(0,0,0,0.08)",
+  emptyIconBg: "rgba(0,0,0,0.05)",
 };
 
 const darkTheme = {
-  bg: "#000000",
-  bgSecondary: "#1C1C1E",
+  bg: "#0F0F0F",
+  bgElevated: "#1C1C1E",
   card: "#1C1C1E",
-  text: "#FFFFFF",
-  subText: "#AEAEB2",
-  hint: "#6E6E73",
-  border: "#2C2C2E",
+  text: "#F5F5F5",
+  subText: "#A0A0A0",
+  hint: "#666666",
+  border: "rgba(255,255,255,0.08)",
   searchBg: "#1C1C1E",
-  iconBg: "#1C1C1E",
-  iconColor: "#FFFFFF",
-  headerBg: "#000000",
+  searchBorder: "rgba(255,255,255,0.05)",
+  iconBg: "rgba(255,255,255,0.08)",
+  iconColor: "#F5F5F5",
+  chipBg: "#252525",
+  divider: "rgba(255,255,255,0.08)",
+  emptyIconBg: "rgba(255,255,255,0.05)",
 };
 
 export default function App() {
@@ -63,11 +112,11 @@ export default function App() {
   const [content, setContent] = useState("");
   const [editingId, setEditingId] = useState(null);
   const [search, setSearch] = useState("");
-  const [colorIndex, setColorIndex] = useState(0);
+  const [colorId, setColorId] = useState(0);
   const [isDark, setIsDark] = useState(false);
 
   const theme = isDark ? darkTheme : lightTheme;
-  const styles = getStyles(theme);
+  const styles = getStyles(theme, isDark);
 
   // ============ Load & Save ============
   useEffect(() => {
@@ -105,19 +154,17 @@ export default function App() {
       const stored = await AsyncStorage.getItem("@dark");
       if (stored !== null) setIsDark(JSON.parse(stored));
     } catch (e) {
-      console.log("Theme load error:", e);
+      console.log("Theme error:", e);
     }
   };
 
   const saveTheme = async (val) => {
     try {
       await AsyncStorage.setItem("@dark", JSON.stringify(val));
-    } catch (e) {
-      console.log("Theme save error:", e);
-    }
+    } catch (e) {}
   };
 
-  // ============ Note actions ============
+  // ============ Actions ============
   const handleSave = () => {
     if (title.trim() === "") {
       Alert.alert("শিরোনাম দিন", "নোটের একটা শিরোনাম দিতে হবে।");
@@ -130,7 +177,7 @@ export default function App() {
       setNotes(
         notes.map((n) =>
           n.id === editingId
-            ? { ...n, title, content, colorIndex, updatedAt: now }
+            ? { ...n, title, content, colorId, updatedAt: now }
             : n,
         ),
       );
@@ -139,7 +186,8 @@ export default function App() {
         id: Date.now().toString(),
         title,
         content,
-        colorIndex,
+        colorId,
+        pinned: false,
         createdAt: now,
         updatedAt: now,
       };
@@ -153,7 +201,7 @@ export default function App() {
     setTitle("");
     setContent("");
     setEditingId(null);
-    setColorIndex(0);
+    setColorId(0);
     setScreen("home");
   };
 
@@ -161,7 +209,7 @@ export default function App() {
     setTitle(note.title);
     setContent(note.content);
     setEditingId(note.id);
-    setColorIndex(note.colorIndex ?? 0);
+    setColorId(note.colorId ?? 0);
     setScreen("edit");
   };
 
@@ -176,9 +224,26 @@ export default function App() {
     ]);
   };
 
-  const formatDate = (isoString) => {
+  const togglePin = (id) => {
+    setNotes(notes.map((n) => (n.id === id ? { ...n, pinned: !n.pinned } : n)));
+  };
+
+  // ============ Relative Time ============
+  const formatRelative = (isoString) => {
     if (!isoString) return "";
+    const now = new Date();
     const d = new Date(isoString);
+    const diffMs = now - d;
+    const diffMin = Math.floor(diffMs / 60000);
+    const diffHr = Math.floor(diffMs / 3600000);
+    const diffDay = Math.floor(diffMs / 86400000);
+
+    if (diffMin < 1) return "এখনই";
+    if (diffMin < 60) return `${diffMin} মিনিট আগে`;
+    if (diffHr < 24) return `${diffHr} ঘণ্টা আগে`;
+    if (diffDay === 1) return "গতকাল";
+    if (diffDay < 7) return `${diffDay} দিন আগে`;
+
     const day = d.getDate();
     const monthNames = [
       "জানু",
@@ -194,12 +259,17 @@ export default function App() {
       "নভে",
       "ডিসে",
     ];
-    const month = monthNames[d.getMonth()];
-    let hour = d.getHours();
-    const min = d.getMinutes().toString().padStart(2, "0");
-    const ampm = hour >= 12 ? "PM" : "AM";
-    hour = hour % 12 || 12;
-    return `${day} ${month}, ${hour}:${min} ${ampm}`;
+    return `${day} ${monthNames[d.getMonth()]}`;
+  };
+
+  // ============ Greeting ============
+  const getGreeting = () => {
+    const h = new Date().getHours();
+    if (h < 5) return "শুভ রাত্রি";
+    if (h < 12) return "শুভ সকাল";
+    if (h < 17) return "শুভ দুপুর";
+    if (h < 20) return "শুভ সন্ধ্যা";
+    return "শুভ রাত্রি";
   };
 
   const filteredNotes = notes.filter(
@@ -208,8 +278,36 @@ export default function App() {
       n.content.toLowerCase().includes(search.toLowerCase()),
   );
 
+  // Sort: pinned first, then by updatedAt
+  const sortedNotes = [...filteredNotes].sort((a, b) => {
+    if (a.pinned && !b.pinned) return -1;
+    if (!a.pinned && b.pinned) return 1;
+    return new Date(b.updatedAt) - new Date(a.updatedAt);
+  });
+
+  const pinnedNotes = sortedNotes.filter((n) => n.pinned);
+  const regularNotes = sortedNotes.filter((n) => !n.pinned);
+
   // ============ HOME SCREEN ============
   if (screen === "home") {
+    const today = new Date();
+    const dayNames = ["রবি", "সোম", "মঙ্গল", "বুধ", "বৃহঃ", "শুক্র", "শনি"];
+    const monthNames = [
+      "জানু",
+      "ফেব",
+      "মার্চ",
+      "এপ্রি",
+      "মে",
+      "জুন",
+      "জুল",
+      "আগ",
+      "সেপ",
+      "অক্টো",
+      "নভে",
+      "ডিসে",
+    ];
+    const dateStr = `${dayNames[today.getDay()]}, ${today.getDate()} ${monthNames[today.getMonth()]}`;
+
     return (
       <SafeAreaView style={styles.container}>
         <StatusBar
@@ -217,85 +315,127 @@ export default function App() {
           backgroundColor={theme.bg}
         />
 
-        {/* Header */}
-        <View style={styles.header}>
-          <View>
-            <Text style={styles.headerTitle}>Notes</Text>
-            <Text style={styles.headerSubtitle}>
-              {notes.length} {notes.length === 1 ? "note" : "notes"}
-            </Text>
-          </View>
-          <TouchableOpacity
-            style={styles.iconBtn}
-            onPress={() => setIsDark(!isDark)}
-            activeOpacity={0.6}
-          >
-            <Ionicons
-              name={isDark ? "sunny-outline" : "moon-outline"}
-              size={22}
-              color={theme.iconColor}
-            />
-          </TouchableOpacity>
-        </View>
-
-        {/* Search */}
-        <View style={styles.searchWrap}>
-          <Ionicons name="search" size={18} color={theme.hint} />
-          <TextInput
-            style={styles.searchInput}
-            value={search}
-            onChangeText={setSearch}
-            placeholder="Search"
-            placeholderTextColor={theme.hint}
-          />
-          {search.length > 0 && (
-            <TouchableOpacity onPress={() => setSearch("")}>
-              <Ionicons name="close-circle" size={18} color={theme.hint} />
-            </TouchableOpacity>
-          )}
-        </View>
-
-        {/* Notes List */}
         <FlatList
-          data={filteredNotes}
+          data={sortedNotes}
           keyExtractor={(item) => item.id}
+          numColumns={2}
+          columnWrapperStyle={styles.row}
           contentContainerStyle={styles.list}
           showsVerticalScrollIndicator={false}
-          renderItem={({ item }) => {
-            const palette = NOTE_COLORS[item.colorIndex ?? 0];
-            return (
-              <TouchableOpacity
-                style={styles.noteCard}
-                onPress={() => openEdit(item)}
-                onLongPress={() => confirmDelete(item.id)}
-                activeOpacity={0.7}
-              >
-                <View
-                  style={[styles.colorBar, { backgroundColor: palette.bar }]}
+          ListHeaderComponent={
+            <View>
+              {/* Top bar: date + theme toggle */}
+              <View style={styles.topBar}>
+                <Text style={styles.dateText}>{dateStr}</Text>
+                <TouchableOpacity
+                  style={styles.themeBtn}
+                  onPress={() => setIsDark(!isDark)}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons
+                    name={isDark ? "sunny" : "moon"}
+                    size={18}
+                    color={theme.iconColor}
+                  />
+                </TouchableOpacity>
+              </View>
+
+              {/* Greeting */}
+              <View style={styles.greetingWrap}>
+                <Text style={styles.greetingSmall}>{getGreeting()},</Text>
+                <Text style={styles.greetingBold}>
+                  আপনার নোটগুলো{"\n"}এখানে আছে ✨
+                </Text>
+              </View>
+
+              {/* Search */}
+              <View style={styles.searchWrap}>
+                <Ionicons name="search" size={18} color={theme.hint} />
+                <TextInput
+                  style={styles.searchInput}
+                  value={search}
+                  onChangeText={setSearch}
+                  placeholder="নোট খুঁজুন..."
+                  placeholderTextColor={theme.hint}
                 />
-                <View style={styles.noteBody}>
-                  <Text style={styles.noteTitle} numberOfLines={1}>
-                    {item.title}
-                  </Text>
-                  {item.content ? (
-                    <Text style={styles.noteContent} numberOfLines={2}>
-                      {item.content}
-                    </Text>
-                  ) : (
-                    <Text style={styles.noteEmpty}>No additional text</Text>
-                  )}
-                  <View style={styles.noteMetaRow}>
+                {search.length > 0 && (
+                  <TouchableOpacity onPress={() => setSearch("")}>
                     <Ionicons
-                      name="time-outline"
-                      size={12}
+                      name="close-circle"
+                      size={18}
                       color={theme.hint}
                     />
-                    <Text style={styles.noteDate}>
-                      {formatDate(item.updatedAt || item.createdAt)}
-                    </Text>
-                  </View>
+                  </TouchableOpacity>
+                )}
+              </View>
+
+              {/* Pinned Section Header */}
+              {pinnedNotes.length > 0 && (
+                <View style={styles.sectionHeader}>
+                  <Ionicons name="bookmark" size={14} color={theme.subText} />
+                  <Text style={styles.sectionTitle}>পিন করা</Text>
                 </View>
-                <Ionicons name="chevron-forward" size={18} color={theme.hint} />
+              )}
+            </View>
+          }
+          renderItem={({ item }) => {
+            const palette = NOTE_COLORS[item.colorId ?? 0];
+            const cardBg = isDark ? palette.darkBg : palette.bg;
+            return (
+              <TouchableOpacity
+                style={[styles.noteCard, { backgroundColor: cardBg }]}
+                onPress={() => openEdit(item)}
+                onLongPress={() => confirmDelete(item.id)}
+                activeOpacity={0.85}
+              >
+                <View style={styles.cardTop}>
+                  <View
+                    style={[
+                      styles.colorDotSmall,
+                      { backgroundColor: palette.bar },
+                    ]}
+                  />
+                  <TouchableOpacity
+                    onPress={() => togglePin(item.id)}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  >
+                    <Ionicons
+                      name={item.pinned ? "bookmark" : "bookmark-outline"}
+                      size={16}
+                      color={item.pinned ? palette.bar : "rgba(0,0,0,0.2)"}
+                    />
+                  </TouchableOpacity>
+                </View>
+
+                <Text
+                  style={[styles.cardTitle, isDark && { color: "#F5F5F5" }]}
+                  numberOfLines={2}
+                >
+                  {item.title}
+                </Text>
+
+                {item.content ? (
+                  <Text
+                    style={[
+                      styles.cardContent,
+                      isDark && { color: "rgba(255,255,255,0.6)" },
+                    ]}
+                    numberOfLines={3}
+                  >
+                    {item.content}
+                  </Text>
+                ) : null}
+
+                <View style={styles.cardBottom}>
+                  <Text
+                    style={[
+                      styles.cardDate,
+                      isDark && { color: "rgba(255,255,255,0.4)" },
+                    ]}
+                  >
+                    {formatRelative(item.updatedAt || item.createdAt)}
+                  </Text>
+                </View>
               </TouchableOpacity>
             );
           }}
@@ -303,33 +443,40 @@ export default function App() {
             <View style={styles.emptyWrap}>
               <View style={styles.emptyIconWrap}>
                 <Ionicons
-                  name={search ? "search-outline" : "document-text-outline"}
-                  size={44}
+                  name={search ? "search-outline" : "sparkles-outline"}
+                  size={40}
                   color={theme.hint}
                 />
               </View>
               <Text style={styles.emptyTitle}>
-                {search ? "No results" : "No notes yet"}
+                {search ? "কিছু পাওয়া যায়নি" : "এখনো কোনো নোট নেই"}
               </Text>
               <Text style={styles.emptyText}>
                 {search
-                  ? "Try searching something else"
-                  : "Tap the + button to add your first note"}
+                  ? "অন্য কিছু লিখে খুঁজুন"
+                  : "নিচের + চেপে প্রথম নোট তৈরি করুন"}
               </Text>
             </View>
           }
         />
 
-        {/* FAB */}
+        {/* Gradient FAB */}
         <TouchableOpacity
-          style={styles.fab}
+          style={styles.fabWrap}
           onPress={() => {
             resetForm();
             setScreen("add");
           }}
           activeOpacity={0.85}
         >
-          <Ionicons name="add" size={32} color="#FFFFFF" />
+          <LinearGradient
+            colors={IOS_BLUE}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.fab}
+          >
+            <Ionicons name="add" size={32} color="#FFFFFF" />
+          </LinearGradient>
         </TouchableOpacity>
       </SafeAreaView>
     );
@@ -337,13 +484,14 @@ export default function App() {
 
   // ============ ADD / EDIT SCREEN ============
   const isEditing = screen === "edit";
-  const palette = NOTE_COLORS[colorIndex];
+  const palette = NOTE_COLORS[colorId];
+  const headerBg = isDark ? palette.darkBg : palette.bg;
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={[styles.container, { backgroundColor: headerBg }]}>
       <StatusBar
         barStyle={isDark ? "light-content" : "dark-content"}
-        backgroundColor={theme.bg}
+        backgroundColor={headerBg}
       />
 
       <KeyboardAvoidingView
@@ -353,77 +501,98 @@ export default function App() {
         {/* Header */}
         <View style={styles.editorHeader}>
           <TouchableOpacity
-            style={styles.iconBtn}
+            style={styles.editorIconBtn}
             onPress={resetForm}
             activeOpacity={0.6}
           >
-            <Ionicons name="chevron-back" size={24} color={IOS_BLUE} />
+            <Ionicons name="chevron-back" size={24} color={theme.text} />
           </TouchableOpacity>
           <Text style={styles.editorHeaderTitle}>
-            {isEditing ? "Edit Note" : "New Note"}
+            {isEditing ? "এডিট করুন" : "নতুন নোট"}
           </Text>
           <TouchableOpacity
-            style={styles.iconBtn}
+            style={styles.editorIconBtn}
             onPress={handleSave}
             activeOpacity={0.6}
           >
-            <Ionicons name="checkmark" size={26} color={IOS_BLUE} />
+            <Ionicons name="checkmark" size={26} color={IOS_BLUE_SOLID} />
           </TouchableOpacity>
         </View>
 
-        {/* Form */}
+        {/* Body */}
         <View style={styles.editorBody}>
           <TextInput
             style={styles.titleInput}
             value={title}
             onChangeText={setTitle}
-            placeholder="Title"
+            placeholder="শিরোনাম"
             placeholderTextColor={theme.hint}
             autoFocus={!isEditing}
           />
-          <View style={styles.divider} />
           <TextInput
             style={styles.contentInput}
             value={content}
             onChangeText={setContent}
-            placeholder="Start typing..."
+            placeholder="লেখা শুরু করুন..."
             placeholderTextColor={theme.hint}
             multiline
             textAlignVertical="top"
           />
         </View>
 
-        {/* Color Picker */}
-        <View style={styles.colorBarBottom}>
-          <Text style={styles.pickerLabel}>COLOR</Text>
+        {/* Bottom Bar: Colors + Save */}
+        <View
+          style={[
+            styles.bottomBar,
+            {
+              backgroundColor: theme.bgElevated,
+              borderTopColor: theme.divider,
+            },
+          ]}
+        >
+          <Text style={styles.pickerLabel}>রঙ</Text>
           <View style={styles.colorRow}>
-            {NOTE_COLORS.map((c, idx) => (
+            {NOTE_COLORS.map((c) => (
               <TouchableOpacity
-                key={idx}
+                key={c.id}
                 style={[
                   styles.colorDot,
-                  { backgroundColor: c.bar },
-                  colorIndex === idx && styles.colorDotSelected,
+                  { backgroundColor: c.bg },
+                  colorId === c.id && {
+                    borderWidth: 3,
+                    borderColor: theme.text,
+                  },
                 ]}
-                onPress={() => setColorIndex(idx)}
+                onPress={() => setColorId(c.id)}
                 activeOpacity={0.7}
               >
-                {colorIndex === idx && (
-                  <Ionicons name="checkmark" size={18} color="#FFFFFF" />
+                {colorId === c.id && (
+                  <Ionicons name="checkmark" size={16} color={theme.text} />
                 )}
               </TouchableOpacity>
             ))}
           </View>
 
-          {/* Save Button */}
           <TouchableOpacity
-            style={[styles.saveBtn, { backgroundColor: palette.bar }]}
+            style={styles.saveBtnWrap}
             onPress={handleSave}
             activeOpacity={0.85}
           >
-            <Text style={styles.saveBtnText}>
-              {isEditing ? "Update Note" : "Save Note"}
-            </Text>
+            <LinearGradient
+              colors={IOS_BLUE}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={styles.saveBtn}
+            >
+              <Ionicons
+                name={isEditing ? "checkmark-done" : "add-circle-outline"}
+                size={20}
+                color="#FFFFFF"
+              />
+              <Text style={styles.saveBtnText}>
+                {isEditing ? "আপডেট করুন" : "সেভ করুন"}
+              </Text>
+            </LinearGradient>
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
@@ -432,34 +601,29 @@ export default function App() {
 }
 
 // ============ STYLES ============
-const getStyles = (theme) =>
+const getStyles = (theme, isDark) =>
   StyleSheet.create({
     container: {
       flex: 1,
       backgroundColor: theme.bg,
     },
 
-    // ---- HEADER ----
-    header: {
-      paddingHorizontal: 20,
-      paddingTop: 8,
-      paddingBottom: 16,
+    // ---- TOP BAR ----
+    topBar: {
       flexDirection: "row",
       justifyContent: "space-between",
-      alignItems: "flex-end",
+      alignItems: "center",
+      paddingHorizontal: 20,
+      paddingTop: 10,
+      paddingBottom: 4,
     },
-    headerTitle: {
-      fontSize: 34,
-      fontWeight: "700",
-      color: theme.text,
-      letterSpacing: -0.5,
-    },
-    headerSubtitle: {
-      fontSize: 13,
+    dateText: {
+      fontSize: 14,
+      fontWeight: "600",
       color: theme.subText,
-      marginTop: 2,
+      letterSpacing: 0.3,
     },
-    iconBtn: {
+    themeBtn: {
       width: 40,
       height: 40,
       borderRadius: 20,
@@ -468,99 +632,145 @@ const getStyles = (theme) =>
       alignItems: "center",
     },
 
+    // ---- GREETING ----
+    greetingWrap: {
+      paddingHorizontal: 20,
+      paddingTop: 8,
+      paddingBottom: 20,
+    },
+    greetingSmall: {
+      fontSize: 18,
+      color: theme.subText,
+      fontWeight: "500",
+      marginBottom: 2,
+    },
+    greetingBold: {
+      fontSize: 28,
+      color: theme.text,
+      fontWeight: "800",
+      lineHeight: 36,
+      letterSpacing: -0.5,
+    },
+
     // ---- SEARCH ----
     searchWrap: {
       flexDirection: "row",
       alignItems: "center",
       backgroundColor: theme.searchBg,
       marginHorizontal: 20,
-      borderRadius: 10,
-      paddingHorizontal: 12,
+      borderRadius: 16,
+      paddingHorizontal: 16,
       paddingVertical: 2,
-      marginBottom: 16,
+      marginBottom: 20,
+      borderWidth: 1,
+      borderColor: theme.searchBorder,
+      shadowColor: "#000",
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: isDark ? 0 : 0.04,
+      shadowRadius: 8,
+      elevation: 1,
     },
     searchInput: {
       flex: 1,
-      fontSize: 16,
+      fontSize: 15,
       color: theme.text,
-      paddingVertical: 10,
-      marginLeft: 8,
+      paddingVertical: 12,
+      marginLeft: 10,
     },
 
-    // ---- LIST ----
-    list: {
+    // ---- SECTION ----
+    sectionHeader: {
+      flexDirection: "row",
+      alignItems: "center",
       paddingHorizontal: 20,
+      marginBottom: 12,
+      gap: 6,
+    },
+    sectionTitle: {
+      fontSize: 13,
+      fontWeight: "700",
+      color: theme.subText,
+      letterSpacing: 0.5,
+      textTransform: "uppercase",
+    },
+
+    // ---- LIST / GRID ----
+    list: {
       paddingBottom: 120,
     },
+    row: {
+      justifyContent: "space-between",
+      paddingHorizontal: 20,
+      marginBottom: 14,
+    },
     noteCard: {
-      backgroundColor: theme.card,
-      borderRadius: 14,
+      width: CARD_WIDTH,
+      borderRadius: 22,
+      padding: 16,
+      minHeight: 160,
+      justifyContent: "space-between",
+      shadowColor: "#000",
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: isDark ? 0.3 : 0.06,
+      shadowRadius: 12,
+      elevation: 2,
+    },
+    cardTop: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
       marginBottom: 10,
-      flexDirection: "row",
-      alignItems: "center",
-      paddingRight: 12,
-      borderWidth: 1,
-      borderColor: theme.border,
-      overflow: "hidden",
     },
-    colorBar: {
-      width: 4,
-      alignSelf: "stretch",
+    colorDotSmall: {
+      width: 8,
+      height: 8,
+      borderRadius: 4,
     },
-    noteBody: {
-      flex: 1,
-      padding: 14,
-      paddingLeft: 12,
-    },
-    noteTitle: {
+    cardTitle: {
       fontSize: 16,
+      fontWeight: "800",
+      color: "#1A1A1A",
+      marginBottom: 6,
+      lineHeight: 22,
+      letterSpacing: -0.2,
+    },
+    cardContent: {
+      fontSize: 13,
+      color: "rgba(0,0,0,0.55)",
+      lineHeight: 18,
+      flex: 1,
+    },
+    cardBottom: {
+      marginTop: 10,
+    },
+    cardDate: {
+      fontSize: 11,
+      color: "rgba(0,0,0,0.4)",
       fontWeight: "600",
-      color: theme.text,
-      marginBottom: 4,
-    },
-    noteContent: {
-      fontSize: 14,
-      color: theme.subText,
-      lineHeight: 19,
-      marginBottom: 6,
-    },
-    noteEmpty: {
-      fontSize: 14,
-      color: theme.hint,
-      fontStyle: "italic",
-      marginBottom: 6,
-    },
-    noteMetaRow: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 4,
-    },
-    noteDate: {
-      fontSize: 12,
-      color: theme.hint,
-      fontWeight: "500",
+      letterSpacing: 0.2,
     },
 
     // ---- EMPTY ----
     emptyWrap: {
       alignItems: "center",
-      marginTop: 80,
+      marginTop: 60,
       paddingHorizontal: 40,
     },
     emptyIconWrap: {
       width: 88,
       height: 88,
       borderRadius: 44,
-      backgroundColor: theme.searchBg,
+      backgroundColor: theme.emptyIconBg,
       justifyContent: "center",
       alignItems: "center",
       marginBottom: 18,
     },
     emptyTitle: {
-      fontSize: 20,
+      fontSize: 19,
       fontWeight: "700",
       color: theme.text,
       marginBottom: 8,
+      letterSpacing: -0.3,
     },
     emptyText: {
       fontSize: 14,
@@ -570,21 +780,22 @@ const getStyles = (theme) =>
     },
 
     // ---- FAB ----
-    fab: {
+    fabWrap: {
       position: "absolute",
       bottom: 28,
       right: 24,
+      shadowColor: IOS_BLUE_SOLID,
+      shadowOffset: { width: 0, height: 8 },
+      shadowOpacity: 0.4,
+      shadowRadius: 18,
+      elevation: 8,
+    },
+    fab: {
       width: 60,
       height: 60,
       borderRadius: 30,
-      backgroundColor: IOS_BLUE,
       justifyContent: "center",
       alignItems: "center",
-      shadowColor: IOS_BLUE,
-      shadowOffset: { width: 0, height: 6 },
-      shadowOpacity: 0.35,
-      shadowRadius: 14,
-      elevation: 6,
     },
 
     // ---- EDITOR ----
@@ -595,83 +806,92 @@ const getStyles = (theme) =>
       paddingHorizontal: 12,
       paddingTop: 8,
       paddingBottom: 8,
-      borderBottomWidth: 1,
-      borderBottomColor: theme.border,
+    },
+    editorIconBtn: {
+      width: 44,
+      height: 44,
+      borderRadius: 22,
+      justifyContent: "center",
+      alignItems: "center",
     },
     editorHeaderTitle: {
-      fontSize: 17,
+      fontSize: 16,
       fontWeight: "600",
       color: theme.text,
+      letterSpacing: 0.2,
     },
     editorBody: {
       flex: 1,
-      paddingHorizontal: 20,
-      paddingTop: 20,
+      paddingHorizontal: 24,
+      paddingTop: 16,
     },
     titleInput: {
-      fontSize: 24,
-      fontWeight: "700",
+      fontSize: 28,
+      fontWeight: "800",
       color: theme.text,
       paddingVertical: 6,
-    },
-    divider: {
-      height: 1,
-      backgroundColor: theme.border,
-      marginVertical: 12,
+      letterSpacing: -0.5,
     },
     contentInput: {
       fontSize: 16,
       color: theme.text,
       lineHeight: 24,
-      minHeight: 200,
-      paddingVertical: 4,
+      minHeight: 180,
+      paddingVertical: 12,
+      opacity: 0.85,
     },
 
-    // ---- COLOR PICKER ----
-    colorBarBottom: {
+    // ---- BOTTOM BAR ----
+    bottomBar: {
       paddingHorizontal: 20,
+      paddingTop: 16,
       paddingBottom: 24,
-      paddingTop: 12,
       borderTopWidth: 1,
-      borderTopColor: theme.border,
+      borderTopLeftRadius: 24,
+      borderTopRightRadius: 24,
     },
     pickerLabel: {
       fontSize: 11,
       fontWeight: "700",
       color: theme.hint,
-      letterSpacing: 1.2,
+      letterSpacing: 1.5,
       marginBottom: 12,
+      textTransform: "uppercase",
     },
     colorRow: {
       flexDirection: "row",
       alignItems: "center",
       marginBottom: 20,
+      gap: 10,
     },
     colorDot: {
-      width: 40,
-      height: 40,
-      borderRadius: 20,
-      marginRight: 12,
+      width: 38,
+      height: 38,
+      borderRadius: 19,
       justifyContent: "center",
       alignItems: "center",
-    },
-    colorDotSelected: {
       borderWidth: 3,
-      borderColor: "#FFFFFF",
-      shadowColor: "#000",
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 0.2,
-      shadowRadius: 4,
-      elevation: 3,
+      borderColor: "transparent",
+    },
+    saveBtnWrap: {
+      shadowColor: IOS_BLUE_SOLID,
+      shadowOffset: { width: 0, height: 6 },
+      shadowOpacity: 0.3,
+      shadowRadius: 12,
+      elevation: 4,
     },
     saveBtn: {
-      borderRadius: 14,
+      borderRadius: 16,
       paddingVertical: 16,
+      flexDirection: "row",
       alignItems: "center",
+      justifyContent: "center",
+      gap: 8,
     },
     saveBtnText: {
       color: "#FFFFFF",
       fontSize: 16,
       fontWeight: "700",
+      letterSpacing: 0.3,
     },
   });
