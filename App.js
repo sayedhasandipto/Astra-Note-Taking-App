@@ -36,9 +36,24 @@ const NOTE_COLORS = [
   { id: 0, bg: "#FBE4E4", darkBg: "#3A2525", bar: "#E89B9B", label: "Rose" },
   { id: 1, bg: "#FCF0D5", darkBg: "#3A3325", bar: "#E8C878", label: "Honey" },
   { id: 2, bg: "#DFF0E0", darkBg: "#253A25", bar: "#94C99B", label: "Mint" },
-  { id: 3, bg: "#DCEAF6", darkBg: "#25303A", bar: "#92BCD9", label: "Sky" },
+  { id: 3, bg: "#DCEAF6", darkBg: "#253030", bar: "#92BCD9", label: "Sky" },
   { id: 4, bg: "#E8E1F5", darkBg: "#2E253A", bar: "#B5A2DC", label: "Lilac" },
   { id: 5, bg: "#FAE5D8", darkBg: "#3A2E25", bar: "#E8B198", label: "Peach" },
+];
+
+// ============ Categories ============
+const CATEGORIES = [
+  { id: "all", label: "All", icon: "apps-outline", color: "#0A84FF" },
+  {
+    id: "personal",
+    label: "Personal",
+    icon: "person-outline",
+    color: "#E89B9B",
+  },
+  { id: "work", label: "Work", icon: "briefcase-outline", color: "#92BCD9" },
+  { id: "ideas", label: "Ideas", icon: "bulb-outline", color: "#E8C878" },
+  { id: "tasks", label: "Tasks", icon: "checkbox-outline", color: "#94C99B" },
+  { id: "study", label: "Study", icon: "book-outline", color: "#B5A2DC" },
 ];
 
 const IOS_BLUE_GRADIENT = ["#0A84FF", "#0060DF"];
@@ -83,6 +98,8 @@ const lightTheme = {
   cardBg: "#FFFFFF",
   sectionBg: "#FFFFFF",
   danger: "#FF3B30",
+  chipInactiveBg: "#FFFFFF",
+  chipBorder: "rgba(0,0,0,0.06)",
 };
 
 const darkTheme = {
@@ -103,6 +120,8 @@ const darkTheme = {
   cardBg: "#1A1A1C",
   sectionBg: "#1A1A1C",
   danger: "#FF453A",
+  chipInactiveBg: "#1A1A1C",
+  chipBorder: "rgba(255,255,255,0.06)",
 };
 
 // ============ Haptic ============
@@ -251,6 +270,7 @@ function NoteCard({
 
   const palette = NOTE_COLORS[item.colorId ?? 0];
   const cardBg = isDark ? palette.darkBg : palette.bg;
+  const category = CATEGORIES.find((c) => c.id === item.categoryId);
 
   const renderRightActions = (progress, dragX) => {
     const scale = dragX.interpolate({
@@ -311,6 +331,7 @@ function NoteCard({
               />
             </TouchableOpacity>
           </View>
+
           <Text
             style={[
               styles.cardTitle,
@@ -321,6 +342,7 @@ function NoteCard({
           >
             {item.title}
           </Text>
+
           {item.content ? (
             <Text
               style={[
@@ -328,12 +350,31 @@ function NoteCard({
                 { fontSize: 13 * fontScale },
                 isDark && { color: "rgba(255,255,255,0.55)" },
               ]}
-              numberOfLines={3}
+              numberOfLines={2}
             >
               {item.content}
             </Text>
           ) : null}
+
           <View style={styles.cardBottom}>
+            {category && category.id !== "all" ? (
+              <View style={styles.cardCategoryRow}>
+                <Ionicons
+                  name={category.icon}
+                  size={10}
+                  color={isDark ? "rgba(255,255,255,0.4)" : "rgba(0,0,0,0.4)"}
+                />
+                <Text
+                  style={[
+                    styles.cardCategory,
+                    { fontSize: 10 * fontScale },
+                    isDark && { color: "rgba(255,255,255,0.4)" },
+                  ]}
+                >
+                  {category.label}
+                </Text>
+              </View>
+            ) : null}
             <Text
               style={[
                 styles.cardDate,
@@ -350,7 +391,81 @@ function NoteCard({
   );
 }
 
-// ============ Trash Card (List row style) ============
+// ============ Category Chip ============
+function CategoryChip({
+  category,
+  active,
+  count,
+  theme,
+  styles,
+  fontScale,
+  onPress,
+}) {
+  return (
+    <TouchableOpacity
+      style={styles.catItem}
+      onPress={onPress}
+      activeOpacity={0.7}
+    >
+      <View
+        style={[
+          styles.catCircle,
+          {
+            backgroundColor: active ? category.color : theme.iconBg,
+          },
+          active && {
+            shadowColor: category.color,
+            shadowOffset: { width: 0, height: 4 },
+            shadowOpacity: 0.35,
+            shadowRadius: 8,
+            elevation: 4,
+          },
+        ]}
+      >
+        <Ionicons
+          name={category.icon}
+          size={22}
+          color={active ? "#FFFFFF" : theme.subText}
+        />
+        {count > 0 ? (
+          <View
+            style={[
+              styles.catBadge,
+              {
+                backgroundColor: active ? "#FFFFFF" : theme.bg,
+                borderColor: active ? category.color : theme.border,
+              },
+            ]}
+          >
+            <Text
+              style={[
+                styles.catBadgeText,
+                { color: active ? category.color : theme.subText },
+              ]}
+            >
+              {count}
+            </Text>
+          </View>
+        ) : null}
+      </View>
+      <Text
+        style={[
+          styles.catLabel,
+          {
+            fontSize: 11 * fontScale,
+            color: active ? theme.text : theme.subText,
+            fontWeight: active ? "700" : "500",
+          },
+        ]}
+        numberOfLines={1}
+      >
+        {category.label}
+      </Text>
+    </TouchableOpacity>
+  );
+}
+
+// ============ Trash Card ============
 function TrashCard({
   item,
   theme,
@@ -369,11 +484,8 @@ function TrashCard({
         { backgroundColor: theme.bgElevated, borderColor: theme.border },
       ]}
     >
-      {/* Color accent bar */}
       <View style={[styles.trashAccent, { backgroundColor: palette.bar }]} />
-
       <View style={styles.trashContent}>
-        {/* Title row */}
         <View style={styles.trashHeader}>
           <View style={[styles.trashDot, { backgroundColor: palette.bar }]} />
           <Text
@@ -386,8 +498,6 @@ function TrashCard({
             {item.title}
           </Text>
         </View>
-
-        {/* Preview */}
         {item.content ? (
           <Text
             style={[
@@ -412,8 +522,6 @@ function TrashCard({
             No content
           </Text>
         )}
-
-        {/* Deleted time */}
         <View style={styles.trashMetaRow}>
           <Ionicons name="time-outline" size={12} color={theme.hint} />
           <Text
@@ -425,8 +533,6 @@ function TrashCard({
             Deleted {formatRelative(item.deletedAt)}
           </Text>
         </View>
-
-        {/* Actions */}
         <View style={styles.trashActions}>
           <TouchableOpacity
             style={[
@@ -450,7 +556,6 @@ function TrashCard({
               Restore
             </Text>
           </TouchableOpacity>
-
           <TouchableOpacity
             style={[
               styles.trashBtn,
@@ -480,7 +585,7 @@ const styles = StyleSheet.create({
   cardStatic: {
     borderRadius: 22,
     padding: 16,
-    minHeight: 160,
+    minHeight: 170,
     justifyContent: "space-between",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 4 },
@@ -504,7 +609,15 @@ const styles = StyleSheet.create({
   },
   cardContent: { color: "rgba(0,0,0,0.55)", lineHeight: 18, flex: 1 },
   cardBottom: { marginTop: 10 },
+  cardCategoryRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    marginBottom: 4,
+  },
+  cardCategory: { fontWeight: "600", letterSpacing: 0.2 },
   cardDate: { color: "rgba(0,0,0,0.4)", fontWeight: "600", letterSpacing: 0.2 },
+
   deleteAction: {
     backgroundColor: DANGER_RED,
     justifyContent: "center",
@@ -514,6 +627,7 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 22,
     borderBottomRightRadius: 22,
   },
+
   skeletonWrap: {
     flexDirection: "row",
     flexWrap: "wrap",
@@ -524,32 +638,54 @@ const styles = StyleSheet.create({
     width: CARD_WIDTH,
     borderRadius: 22,
     padding: 16,
-    minHeight: 160,
+    minHeight: 170,
     marginBottom: 14,
   },
   skeletonDot: { width: 8, height: 8, borderRadius: 4 },
   skeletonLine: { borderRadius: 4 },
+
   trashCard: {
     flexDirection: "row",
-    alignItems: "center",
     marginHorizontal: 20,
-    marginBottom: 10,
-    paddingVertical: 14,
-    paddingRight: 12,
-    borderRadius: 14,
+    marginBottom: 12,
+    borderRadius: 18,
     borderWidth: 1,
     overflow: "hidden",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
   },
-  trashColorBar: { width: 4, alignSelf: "stretch", marginRight: 12 },
-  trashTitle: { fontWeight: "600", color: "#0F0F0F", marginBottom: 3 },
-  trashMeta: { fontWeight: "500", color: "rgba(0,0,0,0.4)" },
-  trashIconBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    justifyContent: "center",
+  trashAccent: { width: 5, alignSelf: "stretch" },
+  trashContent: { flex: 1, padding: 14 },
+  trashHeader: {
+    flexDirection: "row",
     alignItems: "center",
+    gap: 8,
+    marginBottom: 6,
   },
+  trashDot: { width: 8, height: 8, borderRadius: 4 },
+  trashTitle: { flex: 1, fontWeight: "700", letterSpacing: -0.2 },
+  trashPreview: { lineHeight: 18, marginBottom: 8, opacity: 0.9 },
+  trashMetaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    marginBottom: 12,
+  },
+  trashMeta: { fontWeight: "500", letterSpacing: 0.2 },
+  trashActions: { flexDirection: "row", gap: 8 },
+  trashBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 5,
+    paddingVertical: 9,
+    paddingHorizontal: 14,
+    borderRadius: 10,
+  },
+  trashBtnText: { fontWeight: "700", letterSpacing: 0.2 },
 });
 
 // ============ Setting Row ============
@@ -611,9 +747,10 @@ export default function App() {
   const [editingId, setEditingId] = useState(null);
   const [search, setSearch] = useState("");
   const [colorId, setColorId] = useState(0);
+  const [categoryId, setCategoryId] = useState("personal");
+  const [activeCategory, setActiveCategory] = useState("all");
   const [loading, setLoading] = useState(true);
 
-  // Settings
   const [themeMode, setThemeMode] = useState("light");
   const [fontSize, setFontSize] = useState("medium");
   const [sortBy, setSortBy] = useState("newest");
@@ -642,13 +779,11 @@ export default function App() {
   useEffect(() => {
     if (!loading) saveNotes(notes);
   }, [notes]);
-
   useEffect(() => {
     if (!loading) saveTrash(trash);
   }, [trash]);
-
   useEffect(() => {
-    if (!loading) {
+    if (!loading)
       saveSettings({
         themeMode,
         fontSize,
@@ -656,7 +791,6 @@ export default function App() {
         confirmDelete,
         defaultColorId,
       });
-    }
   }, [themeMode, fontSize, sortBy, confirmDelete, defaultColorId]);
 
   const loadNotes = async () => {
@@ -675,14 +809,11 @@ export default function App() {
     try {
       const stored = await AsyncStorage.getItem("@trash");
       let items = stored ? JSON.parse(stored) : [];
-
-      // Auto cleanup: remove items older than 30 days
       const now = Date.now();
       const cutoff = TRASH_RETENTION_DAYS * 24 * 60 * 60 * 1000;
       items = items.filter(
         (i) => now - new Date(i.deletedAt).getTime() < cutoff,
       );
-
       setTrash(items);
     } catch (e) {}
   };
@@ -713,7 +844,7 @@ export default function App() {
     } catch (e) {}
   };
 
-  // ============ Note Actions ============
+  // ============ Actions ============
   const handleSave = () => {
     if (title.trim() === "") {
       triggerHaptic("warning");
@@ -727,7 +858,7 @@ export default function App() {
       setNotes(
         notes.map((n) =>
           n.id === editingId
-            ? { ...n, title, content, colorId, updatedAt: now }
+            ? { ...n, title, content, colorId, categoryId, updatedAt: now }
             : n,
         ),
       );
@@ -738,6 +869,7 @@ export default function App() {
           title,
           content,
           colorId,
+          categoryId,
           pinned: false,
           createdAt: now,
           updatedAt: now,
@@ -753,6 +885,7 @@ export default function App() {
     setContent("");
     setEditingId(null);
     setColorId(defaultColorId);
+    setCategoryId("personal");
     setScreen("home");
   };
 
@@ -762,6 +895,7 @@ export default function App() {
     setContent(note.content);
     setEditingId(note.id);
     setColorId(note.colorId ?? 0);
+    setCategoryId(note.categoryId ?? "personal");
     setScreen("edit");
   };
 
@@ -901,11 +1035,20 @@ export default function App() {
     return "Good night";
   };
 
-  const filteredNotes = notes.filter(
-    (n) =>
+  // Counts per category
+  const countByCategory = (catId) => {
+    if (catId === "all") return notes.length;
+    return notes.filter((n) => n.categoryId === catId).length;
+  };
+
+  const filteredNotes = notes.filter((n) => {
+    const matchesSearch =
       n.title.toLowerCase().includes(search.toLowerCase()) ||
-      n.content.toLowerCase().includes(search.toLowerCase()),
-  );
+      n.content.toLowerCase().includes(search.toLowerCase());
+    const matchesCategory =
+      activeCategory === "all" || n.categoryId === activeCategory;
+    return matchesSearch && matchesCategory;
+  });
 
   const sortedNotes = [...filteredNotes].sort((a, b) => {
     if (a.pinned && !b.pinned) return -1;
@@ -952,7 +1095,6 @@ export default function App() {
             )}
           </View>
 
-          {/* Info banner */}
           <View
             style={[
               s.trashBanner,
@@ -1030,7 +1172,6 @@ export default function App() {
             contentContainerStyle={s.settingsScroll}
             showsVerticalScrollIndicator={false}
           >
-            {/* APPEARANCE */}
             <Text style={s.settingsSection}>APPEARANCE</Text>
             <View
               style={[
@@ -1072,7 +1213,6 @@ export default function App() {
                   );
                 })}
               </View>
-
               <Text style={[s.settingsSubLabel, { marginTop: 20 }]}>
                 Font Size
               </Text>
@@ -1109,7 +1249,6 @@ export default function App() {
               </View>
             </View>
 
-            {/* NOTES */}
             <Text style={s.settingsSection}>NOTES</Text>
             <View
               style={[
@@ -1160,7 +1299,6 @@ export default function App() {
               />
             </View>
 
-            {/* SAFETY */}
             <Text style={s.settingsSection}>SAFETY</Text>
             <View
               style={[
@@ -1195,7 +1333,6 @@ export default function App() {
                   thumbColor="#FFFFFF"
                 />
               </View>
-
               <SettingRow
                 icon="trash-outline"
                 label="Trash"
@@ -1207,7 +1344,6 @@ export default function App() {
                 theme={theme}
                 styles={s}
               />
-
               <SettingRow
                 icon="refresh-outline"
                 label="Reset all data"
@@ -1219,7 +1355,6 @@ export default function App() {
               />
             </View>
 
-            {/* ABOUT */}
             <Text style={s.settingsSection}>ABOUT</Text>
             <View
               style={[
@@ -1391,6 +1526,30 @@ export default function App() {
                     )}
                   </View>
 
+                  {/* Category chips */}
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={s.chipScroll}
+                    style={{ marginBottom: 4 }}
+                  >
+                    {CATEGORIES.map((cat) => (
+                      <CategoryChip
+                        key={cat.id}
+                        category={cat}
+                        active={activeCategory === cat.id}
+                        count={countByCategory(cat.id)}
+                        theme={theme}
+                        styles={s}
+                        fontScale={fontScale}
+                        onPress={() => {
+                          triggerHaptic("light");
+                          setActiveCategory(cat.id);
+                        }}
+                      />
+                    ))}
+                  </ScrollView>
+
                   {pinnedCount > 0 && (
                     <View style={s.sectionHeader}>
                       <Ionicons
@@ -1430,12 +1589,18 @@ export default function App() {
                     />
                   </View>
                   <Text style={[s.emptyTitle, { fontSize: 19 * fontScale }]}>
-                    {search ? "No results" : "Your canvas is empty"}
+                    {search
+                      ? "No results"
+                      : activeCategory !== "all"
+                        ? "No notes in this category"
+                        : "Your canvas is empty"}
                   </Text>
                   <Text style={[s.emptyText, { fontSize: 14 * fontScale }]}>
                     {search
                       ? "Try a different search term"
-                      : "Tap the + button to write your first note"}
+                      : activeCategory !== "all"
+                        ? "Add a note or switch category"
+                        : "Tap the + button to write your first note"}
                   </Text>
                 </View>
               }
@@ -1536,6 +1701,54 @@ export default function App() {
               },
             ]}
           >
+            {/* Category picker */}
+            <Text style={[s.pickerLabel, { fontSize: 11 * fontScale }]}>
+              CATEGORY
+            </Text>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={{ marginBottom: 16 }}
+              contentContainerStyle={{ paddingRight: 20 }}
+            >
+              {CATEGORIES.filter((c) => c.id !== "all").map((cat) => {
+                const active = categoryId === cat.id;
+                return (
+                  <TouchableOpacity
+                    key={cat.id}
+                    style={[
+                      s.catPill,
+                      {
+                        backgroundColor: active ? cat.color : theme.iconBg,
+                      },
+                    ]}
+                    onPress={() => {
+                      triggerHaptic("light");
+                      setCategoryId(cat.id);
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <Ionicons
+                      name={cat.icon}
+                      size={14}
+                      color={active ? "#FFFFFF" : theme.subText}
+                    />
+                    <Text
+                      style={[
+                        s.catPillText,
+                        {
+                          fontSize: 13 * fontScale,
+                          color: active ? "#FFFFFF" : theme.subText,
+                        },
+                      ]}
+                    >
+                      {cat.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+
             <Text style={[s.pickerLabel, { fontSize: 11 * fontScale }]}>
               COLOR
             </Text>
@@ -1596,7 +1809,6 @@ export default function App() {
 const getStyles = (theme, isDark) =>
   StyleSheet.create({
     container: { flex: 1, backgroundColor: theme.bg },
-
     topBar: {
       flexDirection: "row",
       justifyContent: "space-between",
@@ -1614,8 +1826,46 @@ const getStyles = (theme, isDark) =>
       justifyContent: "center",
       alignItems: "center",
     },
+    chipScroll: {
+      paddingHorizontal: 20,
+      paddingTop: 4,
+      paddingBottom: 18,
+    },
 
-    greetingWrap: { paddingHorizontal: 20, paddingTop: 10, paddingBottom: 22 },
+    catItem: {
+      alignItems: "center",
+      width: 66,
+      marginRight: 10,
+    },
+    catCircle: {
+      width: 54,
+      height: 54,
+      borderRadius: 27,
+      justifyContent: "center",
+      alignItems: "center",
+      marginBottom: 8,
+    },
+    catBadge: {
+      position: "absolute",
+      top: -3,
+      right: -3,
+      minWidth: 20,
+      height: 20,
+      borderRadius: 10,
+      paddingHorizontal: 5,
+      justifyContent: "center",
+      alignItems: "center",
+      borderWidth: 2,
+    },
+    catBadgeText: {
+      fontSize: 10,
+      fontWeight: "700",
+    },
+    catLabel: {
+      textAlign: "center",
+      letterSpacing: 0.1,
+    },
+    greetingWrap: { paddingHorizontal: 20, paddingTop: 10, paddingBottom: 18 },
     greetingSmall: { color: theme.subText, fontWeight: "500", marginBottom: 4 },
     greetingBold: {
       color: theme.text,
@@ -1623,7 +1873,6 @@ const getStyles = (theme, isDark) =>
       lineHeight: 38,
       letterSpacing: -0.7,
     },
-
     searchWrap: {
       flexDirection: "row",
       alignItems: "center",
@@ -1632,7 +1881,7 @@ const getStyles = (theme, isDark) =>
       borderRadius: 16,
       paddingHorizontal: 16,
       paddingVertical: 2,
-      marginBottom: 20,
+      marginBottom: 14,
       borderWidth: 1,
       borderColor: theme.searchBorder,
       shadowColor: "#000",
@@ -1735,7 +1984,7 @@ const getStyles = (theme, isDark) =>
     contentInput: {
       color: theme.text,
       lineHeight: 24,
-      minHeight: 180,
+      minHeight: 160,
       paddingVertical: 12,
       opacity: 0.85,
     },
@@ -1752,8 +2001,20 @@ const getStyles = (theme, isDark) =>
       fontWeight: "700",
       color: theme.hint,
       letterSpacing: 1.5,
-      marginBottom: 12,
+      marginBottom: 10,
     },
+
+    catPill: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      borderRadius: 18,
+      marginRight: 8,
+    },
+    catPillText: { fontWeight: "600" },
+
     colorRow: {
       flexDirection: "row",
       alignItems: "center",
@@ -1786,7 +2047,7 @@ const getStyles = (theme, isDark) =>
     },
     saveBtnText: { color: "#FFFFFF", fontWeight: "700", letterSpacing: 0.3 },
 
-    // ---- Settings ----
+    // Settings
     settingsHeader: {
       flexDirection: "row",
       justifyContent: "space-between",
@@ -1841,7 +2102,6 @@ const getStyles = (theme, isDark) =>
       gap: 5,
     },
     segmentText: { fontWeight: "600", fontSize: 13 },
-
     settingRow: {
       flexDirection: "row",
       alignItems: "center",
@@ -1869,7 +2129,6 @@ const getStyles = (theme, isDark) =>
       marginTop: 32,
       marginBottom: 20,
     },
-
     badge: {
       minWidth: 22,
       height: 22,
@@ -1881,8 +2140,7 @@ const getStyles = (theme, isDark) =>
     },
     badgeText: { color: "#FFFFFF", fontSize: 11, fontWeight: "700" },
 
-    // ---- Trash ----
-    // ---- Trash ----
+    // Trash
     trashBanner: {
       flexDirection: "row",
       alignItems: "center",
@@ -1908,75 +2166,5 @@ const getStyles = (theme, isDark) =>
       fontSize: 12.5,
       fontWeight: "500",
       lineHeight: 17,
-    },
-
-    trashCard: {
-      flexDirection: "row",
-      marginHorizontal: 20,
-      marginBottom: 12,
-      borderRadius: 18,
-      borderWidth: 1,
-      overflow: "hidden",
-      shadowColor: "#000",
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: isDark ? 0.25 : 0.05,
-      shadowRadius: 8,
-      elevation: 2,
-    },
-    trashAccent: {
-      width: 5,
-      alignSelf: "stretch",
-    },
-    trashContent: {
-      flex: 1,
-      padding: 14,
-    },
-    trashHeader: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 8,
-      marginBottom: 6,
-    },
-    trashDot: {
-      width: 8,
-      height: 8,
-      borderRadius: 4,
-    },
-    trashTitle: {
-      flex: 1,
-      fontWeight: "700",
-      letterSpacing: -0.2,
-    },
-    trashPreview: {
-      lineHeight: 18,
-      marginBottom: 8,
-      opacity: 0.9,
-    },
-    trashMetaRow: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 4,
-      marginBottom: 12,
-    },
-    trashMeta: {
-      fontWeight: "500",
-      letterSpacing: 0.2,
-    },
-    trashActions: {
-      flexDirection: "row",
-      gap: 8,
-    },
-    trashBtn: {
-      flexDirection: "row",
-      alignItems: "center",
-      justifyContent: "center",
-      gap: 5,
-      paddingVertical: 9,
-      paddingHorizontal: 14,
-      borderRadius: 10,
-    },
-    trashBtnText: {
-      fontWeight: "700",
-      letterSpacing: 0.2,
     },
   });
