@@ -21,12 +21,16 @@ import {
   Pressable,
   LayoutAnimation,
   UIManager,
+  Share,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { BlurView } from "expo-blur";
 import * as Haptics from "expo-haptics";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as FileSystem from "expo-file-system";
+import * as Sharing from "expo-sharing";
+import * as DocumentPicker from "expo-document-picker";
 import {
   Swipeable,
   GestureHandlerRootView,
@@ -446,6 +450,7 @@ function NoteRow({
   onDelete,
   onRestore,
   onPin,
+  onToggleTask,
   formatShortDateTime,
   playlists,
   isTrash,
@@ -551,7 +556,11 @@ function NoteRow({
             />
             <View style={styles.noteRowLeft}>
               <Text
-                style={[styles.noteRowTitle, { fontSize: 16 * fontScale }]}
+                style={[
+                  styles.noteRowTitle,
+                  { fontSize: 16 * fontScale },
+                  item.completed && styles.completedText,
+                ]}
                 numberOfLines={1}
               >
                 {item.title || "Untitled"}
@@ -601,6 +610,22 @@ function NoteRow({
                 ) : null}
               </View>
             </View>
+            {!isTrash && item.categoryId === "tasks" ? (
+              <TouchableOpacity
+                onPress={(e) => {
+                  e?.stopPropagation?.();
+                  onToggleTask?.();
+                }}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                style={{ marginLeft: 4 }}
+              >
+                <Ionicons
+                  name={item.completed ? "checkmark-circle" : "ellipse-outline"}
+                  size={18}
+                  color={item.completed ? SUCCESS_GREEN : GLASS.textTertiary}
+                />
+              </TouchableOpacity>
+            ) : null}
             {item.pinned && !isTrash ? (
               <Ionicons name="bookmark" size={13} color={palette.bar} />
             ) : null}
@@ -627,6 +652,7 @@ function NoteCard({
   fontScale,
   onPress,
   onPin,
+  onToggleTask,
   formatRelative,
   playlists,
 }) {
@@ -690,6 +716,21 @@ function NoteCard({
             />
             {item.pinned && (
               <Ionicons name="bookmark" size={13} color="#FFFFFF" />
+            )}
+            {item.categoryId === "tasks" && (
+              <TouchableOpacity
+                onPress={(e) => {
+                  e?.stopPropagation?.();
+                  onToggleTask?.();
+                }}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Ionicons
+                  name={item.completed ? "checkmark-circle" : "ellipse-outline"}
+                  size={17}
+                  color={item.completed ? SUCCESS_GREEN : GLASS.textSecondary}
+                />
+              </TouchableOpacity>
             )}
           </View>
           <Text
@@ -1078,8 +1119,20 @@ export default function App() {
   const [sortBy, setSortBy] = useState("newest");
   const [confirmDelete, setConfirmDelete] = useState(true);
   const [defaultColorId, setDefaultColorId] = useState(0);
+  const [hapticsEnabled, setHapticsEnabled] = useState(true);
+  const [animationsEnabled, setAnimationsEnabled] = useState(true);
+  const [tagInput, setTagInput] = useState("");
+  const [tags, setTags] = useState([]);
+  const [completed, setCompleted] = useState(false);
+  const [undoState, setUndoState] = useState(null);
 
   const s = styles;
+  const haptic = (type = "light") => {
+    if (hapticsEnabled) triggerHaptic(type);
+  };
+  const animate = () => {
+    if (animationsEnabled) animateLayout();
+  };
   const fontScale = (FONT_SIZES.find((f) => f.id === fontSize) || FONT_SIZES[1])
     .scale;
 
@@ -1111,8 +1164,18 @@ export default function App() {
         confirmDelete,
         defaultColorId,
         viewMode,
+        hapticsEnabled,
+        animationsEnabled,
       });
-  }, [fontSize, sortBy, confirmDelete, defaultColorId, viewMode]);
+  }, [
+    fontSize,
+    sortBy,
+    confirmDelete,
+    defaultColorId,
+    viewMode,
+    hapticsEnabled,
+    animationsEnabled,
+  ]);
 
   const loadNotes = async () => {
     try {
@@ -1165,6 +1228,10 @@ export default function App() {
         if (typeof o.defaultColorId === "number")
           setDefaultColorId(o.defaultColorId);
         if (o.viewMode) setViewMode(o.viewMode);
+        if (typeof o.hapticsEnabled === "boolean")
+          setHapticsEnabled(o.hapticsEnabled);
+        if (typeof o.animationsEnabled === "boolean")
+          setAnimationsEnabled(o.animationsEnabled);
       }
     } catch (e) {}
   };
@@ -1193,7 +1260,7 @@ export default function App() {
   const closeConfirm = () =>
     setConfirmDialog((prev) => ({ ...prev, visible: false }));
   const handleConfirm = () => {
-    triggerHaptic("warning");
+    haptic("warning");
     const cb = confirmDialog.onConfirm;
     closeConfirm();
     setTimeout(() => {
@@ -1202,7 +1269,7 @@ export default function App() {
   };
 
   const openPicker = (type) => {
-    triggerHaptic("light");
+    haptic("light");
     setPickerType(type);
     setPickerVisible(true);
   };
@@ -1238,7 +1305,7 @@ export default function App() {
   };
   const savePlaylistFromModal = () => {
     if (newPlaylistName.trim() === "") {
-      triggerHaptic("warning");
+      haptic("warning");
       return;
     }
     const target =
@@ -1247,7 +1314,7 @@ export default function App() {
         : activeCategory !== "all"
           ? activeCategory
           : categoryId;
-    animateLayout();
+    animate();
     if (editingPlaylistId) {
       setPlaylists(
         playlists.map((p) =>
@@ -1267,7 +1334,7 @@ export default function App() {
       setPlaylists([...playlists, np]);
       if (screen === "add" || screen === "edit") setPlaylistId(np.id);
     }
-    triggerHaptic("success");
+    haptic("success");
     setShowPlaylistModal(false);
     setNewPlaylistName("");
     setEditingPlaylistId(null);
@@ -1278,8 +1345,8 @@ export default function App() {
       `"${p.name}" will be deleted. Notes inside will remain but lose their tag.`,
       "Delete",
       () => {
-        triggerHaptic("error");
-        animateLayout();
+        haptic("error");
+        animate();
         setPlaylists(playlists.filter((x) => x.id !== p.id));
         setNotes(
           notes.map((n) =>
@@ -1292,7 +1359,7 @@ export default function App() {
     );
   };
   const handlePlaylistLongPress = (p) => {
-    triggerHaptic("medium");
+    haptic("medium");
     Alert.alert(p.name, "", [
       { text: "Cancel", style: "cancel" },
       { text: "Rename", onPress: () => openEditPlaylistModal(p) },
@@ -1304,14 +1371,35 @@ export default function App() {
     ]);
   };
 
+  const commitTags = () => {
+    const incoming = tagInput
+      .split(",")
+      .map((t) => t.trim().replace(/^#/, "").toLowerCase())
+      .filter(Boolean);
+    if (incoming.length) {
+      setTags((prev) =>
+        Array.from(new Set([...prev, ...incoming])).slice(0, 10),
+      );
+      setTagInput("");
+    }
+  };
+
+  const removeTag = (tag) => setTags((prev) => prev.filter((t) => t !== tag));
+
   const handleSave = () => {
     if (title.trim() === "" && content.trim() === "") {
-      triggerHaptic("warning");
-      Alert.alert("Empty Note", "Please write something before saving.");
+      haptic("warning");
+      openConfirm(
+        "Empty Note",
+        "Please write something before saving.",
+        "OK",
+        () => {},
+        false,
+      );
       return;
     }
-    triggerHaptic("success");
-    animateLayout();
+    haptic("success");
+    animate();
     const now = new Date().toISOString();
     if (editingId) {
       setNotes(
@@ -1324,6 +1412,8 @@ export default function App() {
                 colorId,
                 categoryId,
                 playlistId,
+                tags,
+                completed: categoryId === "tasks" ? completed : false,
                 updatedAt: now,
               }
             : n,
@@ -1338,6 +1428,8 @@ export default function App() {
           colorId,
           categoryId,
           playlistId,
+          tags,
+          completed: categoryId === "tasks" ? completed : false,
           pinned: false,
           createdAt: now,
           updatedAt: now,
@@ -1354,25 +1446,61 @@ export default function App() {
     setColorId(defaultColorId);
     setCategoryId("personal");
     setPlaylistId(null);
+    setTags([]);
+    setTagInput("");
+    setCompleted(false);
     setScreen("home");
   };
   const openEdit = (note) => {
-    triggerHaptic("light");
+    haptic("light");
     setTitle(note.title);
     setContent(note.content);
     setEditingId(note.id);
     setColorId(note.colorId ?? 0);
     setCategoryId(note.categoryId ?? "personal");
     setPlaylistId(note.playlistId ?? null);
+    setTags(Array.isArray(note.tags) ? note.tags : []);
+    setTagInput("");
+    setCompleted(!!note.completed);
     setScreen("edit");
   };
   const moveToTrash = (id) => {
-    triggerHaptic("warning");
-    animateLayout();
+    haptic("warning");
+    animate();
     const n = notes.find((x) => x.id === id);
     if (!n) return;
+    const deleted = { ...n, deletedAt: new Date().toISOString() };
     setNotes(notes.filter((x) => x.id !== id));
-    setTrash([{ ...n, deletedAt: new Date().toISOString() }, ...trash]);
+    setTrash([deleted, ...trash]);
+    setUndoState({ item: n });
+    setTimeout(() => {
+      setUndoState((prev) => (prev?.item?.id === id ? null : prev));
+    }, 3500);
+  };
+
+  const undoLastTrash = () => {
+    if (!undoState?.item) return;
+    const item = undoState.item;
+    setTrash((prev) => prev.filter((x) => x.id !== item.id));
+    setNotes((prev) => [item, ...prev]);
+    setUndoState(null);
+    haptic("success");
+  };
+
+  const toggleTask = (id) => {
+    haptic("light");
+    animate();
+    setNotes((prev) =>
+      prev.map((n) =>
+        n.id === id
+          ? {
+              ...n,
+              completed: !n.completed,
+              updatedAt: new Date().toISOString(),
+            }
+          : n,
+      ),
+    );
   };
   const requestDelete = (id) => {
     if (!confirmDelete) {
@@ -1387,13 +1515,13 @@ export default function App() {
     );
   };
   const togglePin = (id) => {
-    triggerHaptic("light");
-    animateLayout();
+    haptic("light");
+    animate();
     setNotes(notes.map((n) => (n.id === id ? { ...n, pinned: !n.pinned } : n)));
   };
   const restoreFromTrash = (id) => {
-    triggerHaptic("success");
-    animateLayout();
+    haptic("success");
+    animate();
     const item = trash.find((t) => t.id === id);
     if (!item) return;
     const { deletedAt, ...restored } = item;
@@ -1406,8 +1534,8 @@ export default function App() {
       "This note will be permanently deleted. This cannot be undone.",
       "Delete",
       () => {
-        triggerHaptic("error");
-        animateLayout();
+        haptic("error");
+        animate();
         setTrash(trash.filter((t) => t.id !== id));
       },
     );
@@ -1418,8 +1546,8 @@ export default function App() {
       `All ${trash.length} notes will be permanently deleted. This cannot be undone.`,
       "Empty Trash",
       () => {
-        triggerHaptic("error");
-        animateLayout();
+        haptic("error");
+        animate();
         setTrash([]);
       },
     );
@@ -1430,14 +1558,135 @@ export default function App() {
       "All notes, playlists and trash will be permanently deleted. This cannot be undone.",
       "Delete All",
       async () => {
-        triggerHaptic("error");
-        animateLayout();
+        haptic("error");
+        animate();
         setNotes([]);
         setTrash([]);
         setPlaylists([]);
         await AsyncStorage.multiRemove(["@notes", "@trash", "@playlists"]);
       },
     );
+  };
+
+  const buildBackup = () => ({
+    app: "Astra Glass Notes",
+    version: "2.2.0",
+    schemaVersion: 2,
+    exportedAt: new Date().toISOString(),
+    notes,
+    trash,
+    playlists,
+    settings: {
+      fontSize,
+      sortBy,
+      confirmDelete,
+      defaultColorId,
+      viewMode,
+      hapticsEnabled,
+      animationsEnabled,
+    },
+  });
+
+  const exportBackup = async () => {
+    try {
+      haptic("success");
+      const json = JSON.stringify(buildBackup(), null, 2);
+      const safeDate = new Date().toISOString().replace(/[:.]/g, "-");
+      const uri = `${FileSystem.cacheDirectory}Astra-Backup-${safeDate}.json`;
+      await FileSystem.writeAsStringAsync(uri, json, {
+        encoding: FileSystem.EncodingType.UTF8,
+      });
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(uri, {
+          mimeType: "application/json",
+          dialogTitle: "Export Astra Backup",
+        });
+      } else {
+        await Share.share({ title: "Astra Backup", message: json });
+      }
+    } catch (e) {
+      openConfirm(
+        "Backup Failed",
+        "Astra could not create the backup file. Your current data is unchanged.",
+        "OK",
+        () => {},
+        false,
+      );
+    }
+  };
+
+  const importBackupFile = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: "application/json",
+        copyToCacheDirectory: true,
+      });
+      if (result.canceled) return;
+      const file = result.assets?.[0];
+      if (!file?.uri) return;
+      const json = await FileSystem.readAsStringAsync(file.uri, {
+        encoding: FileSystem.EncodingType.UTF8,
+      });
+      await restoreBackupFromText(json);
+    } catch (e) {
+      openConfirm(
+        "Import Failed",
+        "The selected backup could not be read.",
+        "OK",
+        () => {},
+        false,
+      );
+    }
+  };
+
+  const restoreBackupFromText = async (json) => {
+    try {
+      const data = JSON.parse(json);
+      if (
+        !data ||
+        !Array.isArray(data.notes) ||
+        !Array.isArray(data.trash) ||
+        !Array.isArray(data.playlists)
+      )
+        throw new Error("Invalid backup");
+      openConfirm(
+        "Restore Backup?",
+        `This will replace your current notes, trash and playlists with the backup from ${data.exportedAt ? new Date(data.exportedAt).toLocaleString() : "an unknown date"}.`,
+        "Restore",
+        async () => {
+          const nextSettings = data.settings || {};
+          setNotes(data.notes);
+          setTrash(data.trash);
+          setPlaylists(data.playlists);
+          if (nextSettings.fontSize) setFontSize(nextSettings.fontSize);
+          if (nextSettings.sortBy) setSortBy(nextSettings.sortBy);
+          if (typeof nextSettings.confirmDelete === "boolean")
+            setConfirmDelete(nextSettings.confirmDelete);
+          if (typeof nextSettings.defaultColorId === "number")
+            setDefaultColorId(nextSettings.defaultColorId);
+          if (nextSettings.viewMode) setViewMode(nextSettings.viewMode);
+          if (typeof nextSettings.hapticsEnabled === "boolean")
+            setHapticsEnabled(nextSettings.hapticsEnabled);
+          if (typeof nextSettings.animationsEnabled === "boolean")
+            setAnimationsEnabled(nextSettings.animationsEnabled);
+          await AsyncStorage.multiSet([
+            ["@notes", JSON.stringify(data.notes)],
+            ["@trash", JSON.stringify(data.trash)],
+            ["@playlists", JSON.stringify(data.playlists)],
+          ]);
+          haptic("success");
+        },
+        false,
+      );
+    } catch (e) {
+      openConfirm(
+        "Invalid Backup",
+        "This file is not a valid Astra backup.",
+        "OK",
+        () => {},
+        false,
+      );
+    }
   };
 
   const formatRelative = (iso) => {
@@ -1497,7 +1746,9 @@ export default function App() {
   const filteredNotes = notes.filter((n) => {
     const ms =
       n.title.toLowerCase().includes(search.toLowerCase()) ||
-      n.content.toLowerCase().includes(search.toLowerCase());
+      n.content.toLowerCase().includes(search.toLowerCase()) ||
+      (Array.isArray(n.tags) &&
+        n.tags.some((tag) => tag.toLowerCase().includes(search.toLowerCase())));
     let mc = true;
     if (filterMode === "tasks") mc = n.categoryId === "tasks";
     else mc = activeCategory === "all" || n.categoryId === activeCategory;
@@ -1572,7 +1823,7 @@ export default function App() {
             <NavHeader
               title="Trash"
               onBack={() => {
-                triggerHaptic("light");
+                haptic("light");
                 setScreen("settings");
               }}
               rightIcon={trash.length > 0 ? "trash-outline" : undefined}
@@ -1650,7 +1901,7 @@ export default function App() {
             <NavHeader
               title="Settings"
               onBack={() => {
-                triggerHaptic("light");
+                haptic("light");
                 setScreen("home");
               }}
               styles={s}
@@ -1693,8 +1944,8 @@ export default function App() {
                           key={opt.id}
                           style={[s.segmentBtn, active && s.segmentBtnActive]}
                           onPress={() => {
-                            triggerHaptic("light");
-                            animateLayout();
+                            haptic("light");
+                            animate();
                             setFontSize(opt.id);
                           }}
                           activeOpacity={0.7}
@@ -1776,7 +2027,7 @@ export default function App() {
                   <Switch
                     value={confirmDelete}
                     onValueChange={(v) => {
-                      triggerHaptic("light");
+                      haptic("light");
                       setConfirmDelete(v);
                     }}
                     trackColor={{
@@ -1793,7 +2044,7 @@ export default function App() {
                   label="Trash"
                   badge={trash.length > 0 ? String(trash.length) : null}
                   onPress={() => {
-                    triggerHaptic("light");
+                    haptic("light");
                     setScreen("trash");
                   }}
                   styles={s}
@@ -1807,6 +2058,81 @@ export default function App() {
                   isLast
                   danger
                 />
+              </GlassCard>
+
+              <Text style={s.groupedHeader}>DATA & EXPERIENCE</Text>
+              <GlassCard
+                style={[s.groupedCard, { paddingVertical: 0 }]}
+                intensity={45}
+                bordered
+                strong
+              >
+                <SettingRow
+                  icon="download-outline"
+                  iconColor="#38BDF8"
+                  label="Export Backup"
+                  value="JSON"
+                  onPress={exportBackup}
+                  styles={s}
+                />
+                <SettingRow
+                  icon="cloud-upload-outline"
+                  iconColor="#10B981"
+                  label="Import Backup"
+                  value="JSON file"
+                  onPress={importBackupFile}
+                  styles={s}
+                />
+                <View style={[s.settingRow, s.settingRowBorder]}>
+                  <View
+                    style={[
+                      s.settingIconContainer,
+                      { backgroundColor: "#06B6D4", shadowColor: "#06B6D4" },
+                    ]}
+                  >
+                    <Ionicons
+                      name="phone-portrait-outline"
+                      size={15}
+                      color="#FFFFFF"
+                    />
+                  </View>
+                  <Text style={s.settingLabel}>Haptic Feedback</Text>
+                  <Switch
+                    value={hapticsEnabled}
+                    onValueChange={setHapticsEnabled}
+                    trackColor={{
+                      false: "rgba(255,255,255,0.15)",
+                      true: SUCCESS_GREEN,
+                    }}
+                    thumbColor="#FFFFFF"
+                    ios_backgroundColor="rgba(255,255,255,0.15)"
+                  />
+                </View>
+                <View style={s.settingRow}>
+                  <View
+                    style={[
+                      s.settingIconContainer,
+                      { backgroundColor: "#A855F7", shadowColor: "#A855F7" },
+                    ]}
+                  >
+                    <Ionicons
+                      name="sparkles-outline"
+                      size={15}
+                      color="#FFFFFF"
+                    />
+                  </View>
+                  <Text style={s.settingLabel}>Animations</Text>
+                  <Switch
+                    value={animationsEnabled}
+                    onValueChange={setAnimationsEnabled}
+                    trackColor={{
+                      false: "rgba(255,255,255,0.15)",
+                      true: SUCCESS_GREEN,
+                    }}
+                    thumbColor="#FFFFFF"
+                    ios_backgroundColor="rgba(255,255,255,0.15)"
+                  />
+                </View>
               </GlassCard>
 
               <Text style={s.groupedHeader}>ABOUT</Text>
@@ -1872,7 +2198,7 @@ export default function App() {
               <TouchableOpacity
                 style={s.topBarBtn}
                 onPress={() => {
-                  triggerHaptic("light");
+                  haptic("light");
                   setShowCategoryModal(true);
                 }}
                 activeOpacity={0.7}
@@ -1884,7 +2210,7 @@ export default function App() {
               <SegmentedControl
                 mode={filterMode}
                 onChange={(m) => {
-                  animateLayout();
+                  animate();
                   setFilterMode(m);
                   setActivePlaylist("all");
                   if (m === "notes") setActiveCategory("all");
@@ -1894,8 +2220,8 @@ export default function App() {
               <TouchableOpacity
                 style={s.topBarBtn}
                 onPress={() => {
-                  triggerHaptic("light");
-                  animateLayout();
+                  haptic("light");
+                  animate();
                   setViewMode(viewMode === "list" ? "grid" : "list");
                 }}
                 activeOpacity={0.7}
@@ -1940,7 +2266,7 @@ export default function App() {
                       activePlaylist === "all" && s.playlistChipActive,
                     ]}
                     onPress={() => {
-                      triggerHaptic("light");
+                      haptic("light");
                       setActivePlaylist("all");
                     }}
                     activeOpacity={0.7}
@@ -1968,7 +2294,7 @@ export default function App() {
                           },
                         ]}
                         onPress={() => {
-                          triggerHaptic("light");
+                          haptic("light");
                           setActivePlaylist(p.id);
                         }}
                         onLongPress={() => handlePlaylistLongPress(p)}
@@ -2004,7 +2330,7 @@ export default function App() {
                       { borderStyle: "dashed", borderColor: GLASS.border },
                     ]}
                     onPress={() => {
-                      triggerHaptic("light");
+                      haptic("light");
                       openNewPlaylistModal();
                     }}
                     activeOpacity={0.7}
@@ -2039,6 +2365,7 @@ export default function App() {
                     onPress={() => openEdit(item)}
                     onDelete={() => requestDelete(item.id)}
                     onPin={() => togglePin(item.id)}
+                    onToggleTask={() => toggleTask(item.id)}
                     formatShortDateTime={formatShortDateTime}
                     playlists={playlists}
                   />
@@ -2074,6 +2401,7 @@ export default function App() {
                     fontScale={fontScale}
                     onPress={() => openEdit(item)}
                     onPin={() => togglePin(item.id)}
+                    onToggleTask={() => toggleTask(item.id)}
                     formatRelative={formatRelative}
                     playlists={playlists}
                   />
@@ -2089,10 +2417,20 @@ export default function App() {
               />
             )}
 
+            {undoState && (
+              <GlassCard style={s.undoBar} intensity={85} bordered strong>
+                <Ionicons name="arrow-undo" size={18} color={CYBER_BLUE} />
+                <Text style={s.undoText}>Moved to Trash</Text>
+                <TouchableOpacity onPress={undoLastTrash} activeOpacity={0.7}>
+                  <Text style={s.undoAction}>UNDO</Text>
+                </TouchableOpacity>
+              </GlassCard>
+            )}
+
             {!loading && (
               <FAB
                 onPress={() => {
-                  triggerHaptic("medium");
+                  haptic("medium");
                   resetForm();
                   setScreen("add");
                 }}
@@ -2136,8 +2474,8 @@ export default function App() {
                           key={cat.id}
                           style={[s.modalRow, !isLast && s.modalRowBorder]}
                           onPress={() => {
-                            triggerHaptic("light");
-                            animateLayout();
+                            haptic("light");
+                            animate();
                             setFilterMode("notes");
                             setActiveCategory(cat.id);
                             setActivePlaylist("all");
@@ -2189,7 +2527,7 @@ export default function App() {
                       },
                     ]}
                     onPress={() => {
-                      triggerHaptic("light");
+                      haptic("light");
                       setShowCategoryModal(false);
                       setTimeout(() => setScreen("settings"), 200);
                     }}
@@ -2287,7 +2625,7 @@ export default function App() {
                           },
                         ]}
                         onPress={() => {
-                          triggerHaptic("light");
+                          haptic("light");
                           setNewPlaylistColor(c);
                         }}
                         activeOpacity={0.7}
@@ -2306,7 +2644,7 @@ export default function App() {
                     <TouchableOpacity
                       style={s.modalCancelBtn}
                       onPress={() => {
-                        triggerHaptic("light");
+                        haptic("light");
                         setShowPlaylistModal(false);
                       }}
                       activeOpacity={0.7}
@@ -2375,7 +2713,7 @@ export default function App() {
               <View style={s.navHeaderLeft}>
                 <TouchableOpacity
                   onPress={() => {
-                    triggerHaptic("light");
+                    haptic("light");
                     resetForm();
                   }}
                   activeOpacity={0.6}
@@ -2433,6 +2771,47 @@ export default function App() {
                     multiline
                     textAlignVertical="top"
                   />
+                  <View style={{ marginTop: 18 }}>
+                    <Text style={s.toolbarLabel}>TAGS</Text>
+                    <View style={s.tagInputRow}>
+                      <TextInput
+                        style={s.tagInput}
+                        value={tagInput}
+                        onChangeText={setTagInput}
+                        onSubmitEditing={commitTags}
+                        placeholder="Add tags, comma separated"
+                        placeholderTextColor={GLASS.textTertiary}
+                        autoCapitalize="none"
+                        returnKeyType="done"
+                      />
+                      <TouchableOpacity
+                        style={s.tagAddBtn}
+                        onPress={commitTags}
+                        activeOpacity={0.7}
+                      >
+                        <Ionicons name="add" size={18} color="#FFFFFF" />
+                      </TouchableOpacity>
+                    </View>
+                    {tags.length > 0 && (
+                      <View style={s.tagWrap}>
+                        {tags.map((tag) => (
+                          <TouchableOpacity
+                            key={tag}
+                            style={s.tagChip}
+                            onPress={() => removeTag(tag)}
+                            activeOpacity={0.7}
+                          >
+                            <Text style={s.tagChipText}>#{tag}</Text>
+                            <Ionicons
+                              name="close"
+                              size={12}
+                              color={GLASS.textSecondary}
+                            />
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    )}
+                  </View>
                 </ScrollView>
               </GlassCard>
             </View>
@@ -2443,6 +2822,32 @@ export default function App() {
                   showsVerticalScrollIndicator={false}
                   contentContainerStyle={{ paddingBottom: 4 }}
                 >
+                  {categoryId === "tasks" && (
+                    <View style={s.toolbarSection}>
+                      <Text style={s.toolbarLabel}>TASK STATUS</Text>
+                      <TouchableOpacity
+                        style={[
+                          s.taskStatusPill,
+                          completed && s.taskStatusPillDone,
+                        ]}
+                        onPress={() => setCompleted((v) => !v)}
+                        activeOpacity={0.7}
+                      >
+                        <Ionicons
+                          name={
+                            completed ? "checkmark-circle" : "ellipse-outline"
+                          }
+                          size={16}
+                          color={
+                            completed ? SUCCESS_GREEN : GLASS.textSecondary
+                          }
+                        />
+                        <Text style={s.toolbarPillText}>
+                          {completed ? "Completed" : "Pending"}
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
                   <View style={s.toolbarSection}>
                     <Text style={s.toolbarLabel}>CATEGORY</Text>
                     <ScrollView
@@ -2467,7 +2872,7 @@ export default function App() {
                               },
                             ]}
                             onPress={() => {
-                              triggerHaptic("light");
+                              haptic("light");
                               setCategoryId(cat.id);
                               setPlaylistId(null);
                             }}
@@ -2513,7 +2918,7 @@ export default function App() {
                           },
                         ]}
                         onPress={() => {
-                          triggerHaptic("light");
+                          haptic("light");
                           setPlaylistId(null);
                         }}
                         activeOpacity={0.7}
@@ -2546,7 +2951,7 @@ export default function App() {
                               },
                             ]}
                             onPress={() => {
-                              triggerHaptic("light");
+                              haptic("light");
                               setPlaylistId(p.id);
                             }}
                             onLongPress={() => handlePlaylistLongPress(p)}
@@ -2582,7 +2987,7 @@ export default function App() {
                           { borderStyle: "dashed", borderColor: GLASS.border },
                         ]}
                         onPress={() => {
-                          triggerHaptic("light");
+                          haptic("light");
                           openNewPlaylistModal();
                         }}
                         activeOpacity={0.7}
@@ -2618,7 +3023,7 @@ export default function App() {
                               },
                             ]}
                             onPress={() => {
-                              triggerHaptic("light");
+                              haptic("light");
                               setColorId(c.id);
                             }}
                             activeOpacity={0.7}
@@ -2708,7 +3113,7 @@ export default function App() {
                         },
                       ]}
                       onPress={() => {
-                        triggerHaptic("light");
+                        haptic("light");
                         setNewPlaylistColor(c);
                       }}
                       activeOpacity={0.7}
@@ -2723,7 +3128,7 @@ export default function App() {
                   <TouchableOpacity
                     style={s.modalCancelBtn}
                     onPress={() => {
-                      triggerHaptic("light");
+                      haptic("light");
                       setShowPlaylistModal(false);
                     }}
                     activeOpacity={0.7}
@@ -3083,6 +3488,99 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     overflow: "hidden",
   },
+  completedText: {
+    textDecorationLine: "line-through",
+    opacity: 0.55,
+  },
+  undoBar: {
+    position: "absolute",
+    left: 16,
+    right: 16,
+    bottom: 92,
+    minHeight: 52,
+    borderRadius: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 14,
+    gap: 10,
+    zIndex: 20,
+  },
+  undoText: {
+    flex: 1,
+    color: GLASS.textPrimary,
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  undoAction: {
+    color: CYBER_BLUE,
+    fontSize: 12,
+    fontWeight: "800",
+    letterSpacing: 0.8,
+  },
+  tagInputRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginTop: 8,
+  },
+  tagInput: {
+    flex: 1,
+    minHeight: 42,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: GLASS.border,
+    backgroundColor: "rgba(255,255,255,0.05)",
+    paddingHorizontal: 12,
+    color: GLASS.textPrimary,
+    fontSize: 13,
+  },
+  tagAddBtn: {
+    width: 42,
+    height: 42,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: CYBER_BLUE,
+  },
+  tagWrap: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 7,
+    marginTop: 9,
+  },
+  tagChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 9,
+    paddingVertical: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "rgba(56,189,248,0.35)",
+    backgroundColor: "rgba(56,189,248,0.12)",
+  },
+  tagChipText: {
+    color: GLASS.textSecondary,
+    fontSize: 11,
+    fontWeight: "600",
+  },
+  taskStatusPill: {
+    alignSelf: "flex-start",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: GLASS.border,
+    backgroundColor: GLASS.card,
+  },
+  taskStatusPillDone: {
+    borderColor: SUCCESS_GREEN,
+    backgroundColor: "rgba(16,185,129,0.12)",
+  },
+
   madeWith: {
     fontSize: 12,
     textAlign: "center",
