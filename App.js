@@ -19,6 +19,8 @@ import {
   Switch,
   Modal,
   Pressable,
+  LayoutAnimation,
+  UIManager,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
@@ -30,6 +32,14 @@ import {
   GestureHandlerRootView,
 } from "react-native-gesture-handler";
 
+// Enable LayoutAnimation on Android
+if (
+  Platform.OS === "android" &&
+  UIManager.setLayoutAnimationEnabledExperimental
+) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
+
 const { width, height } = Dimensions.get("window");
 const CARD_WIDTH = (width - 56) / 2;
 const TRASH_RETENTION_DAYS = 30;
@@ -40,7 +50,7 @@ const ANDROID_STATUS_BAR_HEIGHT =
 const BG_GRADIENT = ["#050816", "#0A1440", "#1E3A8A", "#0EA5E9", "#0C4A6E"];
 const BG_GRADIENT_LOCATIONS = [0, 0.25, 0.55, 0.8, 1];
 
-// ============ Note Colors (Frosted Tints) ============
+// ============ Note Colors ============
 const NOTE_COLORS = [
   {
     id: 0,
@@ -151,7 +161,6 @@ const CATEGORIES = [
 ];
 
 const CYBER_BLUE = "#38BDF8";
-const ELECTRIC_BLUE = "#3B82F6";
 const DANGER_RED = "#F43F5E";
 const SUCCESS_GREEN = "#10B981";
 
@@ -159,7 +168,6 @@ const SUCCESS_GREEN = "#10B981";
 const GLASS = {
   card: "rgba(255,255,255,0.08)",
   cardStrong: "rgba(255,255,255,0.12)",
-  cardSubtle: "rgba(255,255,255,0.05)",
   border: "rgba(255,255,255,0.18)",
   borderStrong: "rgba(255,255,255,0.28)",
   borderSubtle: "rgba(255,255,255,0.12)",
@@ -207,6 +215,22 @@ const triggerHaptic = (type = "light") => {
   } catch (e) {}
 };
 
+// ============ LayoutAnimation Helper ============
+const animateLayout = () => {
+  LayoutAnimation.configureNext({
+    duration: 260,
+    create: {
+      type: LayoutAnimation.Types.easeInEaseOut,
+      property: LayoutAnimation.Properties.opacity,
+    },
+    update: { type: LayoutAnimation.Types.easeInEaseOut },
+    delete: {
+      type: LayoutAnimation.Types.easeInEaseOut,
+      property: LayoutAnimation.Properties.opacity,
+    },
+  });
+};
+
 // ============ Glass Card ============
 function GlassCard({
   children,
@@ -246,17 +270,39 @@ function GlassCard({
 
 // ============ Nav Header ============
 function NavHeader({ title, onBack, rightIcon, onRightPress, styles }) {
+  const scaleAnim = useRef(new Animated.Value(1)).current;
+  const handlePressIn = () =>
+    Animated.spring(scaleAnim, {
+      toValue: 0.9,
+      useNativeDriver: true,
+      speed: 40,
+    }).start();
+  const handlePressOut = () =>
+    Animated.spring(scaleAnim, {
+      toValue: 1,
+      useNativeDriver: true,
+      speed: 40,
+    }).start();
+
   return (
     <View style={styles.navHeader}>
       <View style={styles.navHeaderLeft}>
         {onBack ? (
-          <TouchableOpacity
-            onPress={onBack}
-            activeOpacity={0.6}
-            style={styles.navBackBtn}
-          >
-            <Ionicons name="chevron-back" size={26} color={GLASS.textPrimary} />
-          </TouchableOpacity>
+          <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
+            <TouchableOpacity
+              onPress={onBack}
+              onPressIn={handlePressIn}
+              onPressOut={handlePressOut}
+              activeOpacity={0.7}
+              style={styles.navBackBtn}
+            >
+              <Ionicons
+                name="chevron-back"
+                size={26}
+                color={GLASS.textPrimary}
+              />
+            </TouchableOpacity>
+          </Animated.View>
         ) : null}
       </View>
       <Text style={styles.navTitle} numberOfLines={1}>
@@ -311,25 +357,54 @@ function SearchBar({ value, onChangeText, styles }) {
 
 // ============ Segmented Control ============
 function SegmentedControl({ mode, onChange, styles }) {
+  const slideAnim = useRef(
+    new Animated.Value(mode === "notes" ? 0 : 1),
+  ).current;
+
+  useEffect(() => {
+    Animated.spring(slideAnim, {
+      toValue: mode === "notes" ? 0 : 1,
+      useNativeDriver: true,
+      friction: 9,
+      tension: 90,
+    }).start();
+  }, [mode]);
+
   return (
     <GlassCard style={styles.segmentWrapper} intensity={35} bordered>
       <View style={styles.segmentInner}>
+        {/* Sliding gradient indicator */}
+        <Animated.View
+          style={[
+            styles.segmentSlider,
+            {
+              transform: [
+                {
+                  translateX: slideAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [0, 108],
+                  }),
+                },
+              ],
+            },
+          ]}
+        >
+          <LinearGradient
+            colors={["rgba(56,189,248,0.75)", "rgba(59,130,246,0.75)"]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={StyleSheet.absoluteFill}
+          />
+        </Animated.View>
+
         <TouchableOpacity
-          style={[styles.segment, mode === "notes" && styles.segmentActive]}
+          style={styles.segment}
           onPress={() => {
             triggerHaptic("light");
             onChange("notes");
           }}
           activeOpacity={0.7}
         >
-          {mode === "notes" && (
-            <LinearGradient
-              colors={["rgba(56,189,248,0.55)", "rgba(59,130,246,0.55)"]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={StyleSheet.absoluteFill}
-            />
-          )}
           <Text
             style={[
               styles.segmentText,
@@ -340,21 +415,13 @@ function SegmentedControl({ mode, onChange, styles }) {
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
-          style={[styles.segment, mode === "tasks" && styles.segmentActive]}
+          style={styles.segment}
           onPress={() => {
             triggerHaptic("light");
             onChange("tasks");
           }}
           activeOpacity={0.7}
         >
-          {mode === "tasks" && (
-            <LinearGradient
-              colors={["rgba(56,189,248,0.55)", "rgba(59,130,246,0.55)"]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={StyleSheet.absoluteFill}
-            />
-          )}
           <Text
             style={[
               styles.segmentText,
@@ -369,9 +436,10 @@ function SegmentedControl({ mode, onChange, styles }) {
   );
 }
 
-// ============ Note Row ============
+// ============ Note Row (FIXED + Animated) ============
 function NoteRow({
   item,
+  index,
   styles,
   fontScale,
   onPress,
@@ -382,11 +450,32 @@ function NoteRow({
   playlists,
   isTrash,
 }) {
-  const swipeRightRef = useRef(null);
-  const swipeLeftRef = useRef(null);
+  const swipeRef = useRef(null);
   const palette = NOTE_COLORS[item.colorId ?? 0];
   const playlist = playlists.find((p) => p.id === item.playlistId);
 
+  // Entrance animation
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const translateY = useRef(new Animated.Value(10)).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 350,
+        delay: (index || 0) * 40,
+        useNativeDriver: true,
+      }),
+      Animated.timing(translateY, {
+        toValue: 0,
+        duration: 350,
+        delay: (index || 0) * 40,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, []);
+
+  // Right swipe = Restore (only in trash) | Left swipe = Delete
   const renderLeftActions = () => {
     if (!isTrash) return null;
     return (
@@ -394,8 +483,9 @@ function NoteRow({
         style={[styles.swipeRestore, { backgroundColor: SUCCESS_GREEN }]}
         onPress={() => {
           triggerHaptic("success");
-          swipeRightRef.current?.close();
+          // Call restore FIRST, then close swipe
           onRestore?.();
+          swipeRef.current?.close();
         }}
         activeOpacity={0.85}
       >
@@ -410,8 +500,8 @@ function NoteRow({
       style={[styles.swipeDelete, { backgroundColor: DANGER_RED }]}
       onPress={() => {
         triggerHaptic("warning");
-        swipeLeftRef.current?.close();
         onDelete?.();
+        swipeRef.current?.close();
       }}
       activeOpacity={0.85}
     >
@@ -421,116 +511,115 @@ function NoteRow({
   );
 
   return (
-    <View style={styles.noteRowContainer}>
+    <Animated.View
+      style={[
+        styles.noteRowContainer,
+        {
+          opacity: fadeAnim,
+          transform: [{ translateY }],
+        },
+        isTrash && { opacity: 0.75 },
+      ]}
+    >
       <Swipeable
-        ref={swipeRightRef}
+        ref={swipeRef}
         renderLeftActions={renderLeftActions}
+        renderRightActions={renderRightActions}
         overshootLeft={false}
+        overshootRight={false}
         friction={2}
         leftThreshold={40}
+        rightThreshold={40}
       >
-        <Swipeable
-          ref={swipeLeftRef}
-          renderRightActions={renderRightActions}
-          overshootRight={false}
-          friction={2}
-          rightThreshold={40}
-        >
-          <GlassCard style={styles.noteRowCard} intensity={50} bordered>
-            <TouchableOpacity
-              style={styles.noteRowInner}
-              onPress={onPress}
-              onLongPress={onPin}
-              activeOpacity={0.7}
-            >
-              <View
-                style={[
-                  styles.noteRowAccent,
-                  {
-                    backgroundColor: palette.bar,
-                    shadowColor: palette.glow,
-                    shadowOpacity: 0.8,
-                    shadowRadius: 8,
-                  },
-                ]}
-              />
-
-              <View style={styles.noteRowLeft}>
+        <GlassCard style={styles.noteRowCard} intensity={50} bordered>
+          <TouchableOpacity
+            style={styles.noteRowInner}
+            onPress={onPress}
+            onLongPress={onPin}
+            activeOpacity={0.7}
+          >
+            <View
+              style={[
+                styles.noteRowAccent,
+                {
+                  backgroundColor: palette.bar,
+                  shadowColor: palette.glow,
+                  shadowOpacity: 0.8,
+                  shadowRadius: 8,
+                },
+              ]}
+            />
+            <View style={styles.noteRowLeft}>
+              <Text
+                style={[styles.noteRowTitle, { fontSize: 16 * fontScale }]}
+                numberOfLines={1}
+              >
+                {item.title || "Untitled"}
+              </Text>
+              <View style={styles.noteRowMeta}>
                 <Text
-                  style={[styles.noteRowTitle, { fontSize: 16 * fontScale }]}
-                  numberOfLines={1}
+                  style={[styles.noteRowTime, { fontSize: 12 * fontScale }]}
                 >
-                  {item.title || "Untitled"}
+                  {isTrash ? "Deleted " : ""}
+                  {formatShortDateTime(item.updatedAt || item.createdAt)}
                 </Text>
-                <View style={styles.noteRowMeta}>
-                  <Text
-                    style={[styles.noteRowTime, { fontSize: 12 * fontScale }]}
-                  >
-                    {isTrash ? "Deleted " : ""}
-                    {formatShortDateTime(item.updatedAt || item.createdAt)}
-                  </Text>
-                  {playlist && !isTrash ? (
-                    <>
-                      <View style={styles.dotSeparator} />
-                      <View
-                        style={[
-                          styles.playlistMiniDot,
-                          {
-                            backgroundColor: playlist.color,
-                            shadowColor: playlist.color,
-                            shadowOpacity: 0.9,
-                            shadowRadius: 5,
-                          },
-                        ]}
-                      />
-                      <Text
-                        style={[
-                          styles.noteRowTime,
-                          { fontSize: 12 * fontScale },
-                        ]}
-                        numberOfLines={1}
-                      >
-                        {playlist.name}
-                      </Text>
-                    </>
-                  ) : null}
-                  {!playlist && !isTrash && item.content ? (
-                    <>
-                      <View style={styles.dotSeparator} />
-                      <Text
-                        style={[
-                          styles.noteRowPreview,
-                          { fontSize: 12 * fontScale },
-                        ]}
-                        numberOfLines={1}
-                      >
-                        {item.content}
-                      </Text>
-                    </>
-                  ) : null}
-                </View>
+                {playlist && !isTrash ? (
+                  <>
+                    <View style={styles.dotSeparator} />
+                    <View
+                      style={[
+                        styles.playlistMiniDot,
+                        {
+                          backgroundColor: playlist.color,
+                          shadowColor: playlist.color,
+                          shadowOpacity: 0.9,
+                          shadowRadius: 5,
+                        },
+                      ]}
+                    />
+                    <Text
+                      style={[styles.noteRowTime, { fontSize: 12 * fontScale }]}
+                      numberOfLines={1}
+                    >
+                      {playlist.name}
+                    </Text>
+                  </>
+                ) : null}
+                {!playlist && !isTrash && item.content ? (
+                  <>
+                    <View style={styles.dotSeparator} />
+                    <Text
+                      style={[
+                        styles.noteRowPreview,
+                        { fontSize: 12 * fontScale },
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {item.content}
+                    </Text>
+                  </>
+                ) : null}
               </View>
-
-              {item.pinned && !isTrash ? (
-                <Ionicons name="bookmark" size={13} color={palette.bar} />
-              ) : null}
-              {!isTrash ? (
-                <Ionicons
-                  name="chevron-forward"
-                  size={16}
-                  color={GLASS.textQuaternary}
-                  style={{ marginLeft: 6 }}
-                />
-              ) : null}
-            </TouchableOpacity>
-          </GlassCard>
-        </Swipeable>
+            </View>
+            {item.pinned && !isTrash ? (
+              <Ionicons name="bookmark" size={13} color={palette.bar} />
+            ) : null}
+            {!isTrash ? (
+              <Ionicons
+                name="chevron-forward"
+                size={16}
+                color={GLASS.textQuaternary}
+                style={{ marginLeft: 6 }}
+              />
+            ) : null}
+          </TouchableOpacity>
+        </GlassCard>
       </Swipeable>
-    </View>
+    </Animated.View>
   );
 }
 
-// ============ Note Card (Grid) ============
+// ============ Note Card (Grid + Animated) ============
 function NoteCard({
   item,
   index,
@@ -542,20 +631,36 @@ function NoteCard({
   playlists,
 }) {
   const fadeAnim = useRef(new Animated.Value(0)).current;
+  const scaleAnim = useRef(new Animated.Value(0.94)).current;
   const palette = NOTE_COLORS[item.colorId ?? 0];
   const playlist = playlists.find((p) => p.id === item.playlistId);
 
   useEffect(() => {
-    Animated.timing(fadeAnim, {
-      toValue: 1,
-      duration: 400,
-      delay: index * 50,
-      useNativeDriver: true,
-    }).start();
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 400,
+        delay: index * 60,
+        useNativeDriver: true,
+      }),
+      Animated.spring(scaleAnim, {
+        toValue: 1,
+        friction: 8,
+        tension: 80,
+        delay: index * 60,
+        useNativeDriver: true,
+      }),
+    ]).start();
   }, []);
 
   return (
-    <Animated.View style={{ opacity: fadeAnim, width: CARD_WIDTH }}>
+    <Animated.View
+      style={{
+        opacity: fadeAnim,
+        transform: [{ scale: scaleAnim }],
+        width: CARD_WIDTH,
+      }}
+    >
       <GlassCard
         style={[styles.noteCard, { borderColor: palette.border }]}
         intensity={55}
@@ -684,24 +789,68 @@ function SettingRow({
   );
 }
 
-// ============ FAB ============
+// ============ FAB (with press animation) ============
 function FAB({ onPress, styles }) {
+  const scaleAnim = useRef(new Animated.Value(1)).current;
+  const handlePressIn = () =>
+    Animated.spring(scaleAnim, {
+      toValue: 0.9,
+      useNativeDriver: true,
+      speed: 40,
+    }).start();
+  const handlePressOut = () =>
+    Animated.spring(scaleAnim, {
+      toValue: 1,
+      useNativeDriver: true,
+      speed: 30,
+    }).start();
+
   return (
-    <TouchableOpacity style={styles.fab} onPress={onPress} activeOpacity={0.85}>
-      <LinearGradient
-        colors={["#38BDF8", "#3B82F6", "#6366F1"]}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={styles.fabInner}
+    <Animated.View style={[styles.fab, { transform: [{ scale: scaleAnim }] }]}>
+      <TouchableOpacity
+        onPress={onPress}
+        onPressIn={handlePressIn}
+        onPressOut={handlePressOut}
+        activeOpacity={0.9}
       >
-        <Ionicons name="create-outline" size={26} color="#FFFFFF" />
-      </LinearGradient>
-    </TouchableOpacity>
+        <LinearGradient
+          colors={["#38BDF8", "#3B82F6", "#6366F1"]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.fabInner}
+        >
+          <Ionicons name="add" size={30} color="#FFFFFF" />
+        </LinearGradient>
+      </TouchableOpacity>
+    </Animated.View>
   );
 }
 
-// ============ Confirm Dialog ============
+// ============ Confirm Dialog (Animated) ============
 function ConfirmDialog({ dialog, onCancel, onConfirm, styles }) {
+  const scaleAnim = useRef(new Animated.Value(0.85)).current;
+  const opacityAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (dialog.visible) {
+      scaleAnim.setValue(0.85);
+      opacityAnim.setValue(0);
+      Animated.parallel([
+        Animated.spring(scaleAnim, {
+          toValue: 1,
+          friction: 8,
+          tension: 90,
+          useNativeDriver: true,
+        }),
+        Animated.timing(opacityAnim, {
+          toValue: 1,
+          duration: 200,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    }
+  }, [dialog.visible]);
+
   return (
     <Modal
       visible={dialog.visible}
@@ -714,7 +863,12 @@ function ConfirmDialog({ dialog, onCancel, onConfirm, styles }) {
           style={styles.confirmWrap}
           onPress={(e) => e.stopPropagation()}
         >
-          <View style={styles.confirmCard}>
+          <Animated.View
+            style={[
+              styles.confirmCard,
+              { opacity: opacityAnim, transform: [{ scale: scaleAnim }] },
+            ]}
+          >
             <BlurView
               intensity={90}
               tint="dark"
@@ -767,7 +921,7 @@ function ConfirmDialog({ dialog, onCancel, onConfirm, styles }) {
                 </TouchableOpacity>
               </View>
             </View>
-          </View>
+          </Animated.View>
         </Pressable>
       </Pressable>
     </Modal>
@@ -841,6 +995,50 @@ function OptionPickerModal({
   );
 }
 
+// ============ Empty State (Minimal + Animated) ============
+function EmptyState({ search, filterMode, activePlaylist, styles }) {
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const scaleAnim = useRef(new Animated.Value(0.9)).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 500,
+        useNativeDriver: true,
+      }),
+      Animated.spring(scaleAnim, {
+        toValue: 1,
+        friction: 8,
+        tension: 70,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [search, filterMode, activePlaylist]);
+
+  let iconName = "documents-outline";
+  if (search) iconName = "search-outline";
+  else if (filterMode === "tasks") iconName = "checkbox-outline";
+  else if (activePlaylist !== "all") iconName = "albums-outline";
+
+  let message = "No notes here yet";
+  if (search) message = "No results found";
+  else if (filterMode === "tasks") message = "No tasks here yet";
+  else if (activePlaylist !== "all") message = "This playlist is empty";
+
+  return (
+    <Animated.View
+      style={[
+        styles.emptyContainer,
+        { opacity: fadeAnim, transform: [{ scale: scaleAnim }] },
+      ]}
+    >
+      <Ionicons name={iconName} size={84} color="rgba(96,165,250,0.16)" />
+      <Text style={styles.emptyText}>{message}</Text>
+    </Animated.View>
+  );
+}
+
 // ============ Main App ============
 export default function App() {
   const [screen, setScreen] = useState("home");
@@ -867,7 +1065,6 @@ export default function App() {
   const [pickerVisible, setPickerVisible] = useState(false);
   const [pickerType, setPickerType] = useState(null);
 
-  // Custom Confirm Dialog state
   const [confirmDialog, setConfirmDialog] = useState({
     visible: false,
     title: "",
@@ -977,7 +1174,6 @@ export default function App() {
     } catch (e) {}
   };
 
-  // ============ Confirm Dialog Helpers ============
   const openConfirm = (
     title,
     message,
@@ -994,18 +1190,15 @@ export default function App() {
       onConfirm,
     });
   };
-
-  const closeConfirm = () => {
+  const closeConfirm = () =>
     setConfirmDialog((prev) => ({ ...prev, visible: false }));
-  };
-
   const handleConfirm = () => {
     triggerHaptic("warning");
     const cb = confirmDialog.onConfirm;
     closeConfirm();
     setTimeout(() => {
       if (cb) cb();
-    }, 150);
+    }, 200);
   };
 
   const openPicker = (type) => {
@@ -1029,7 +1222,6 @@ export default function App() {
     return { title: "", options: [], selectedId: null };
   };
 
-  // Playlist
   const openNewPlaylistModal = () => {
     setEditingPlaylistId(null);
     setNewPlaylistName("");
@@ -1055,6 +1247,7 @@ export default function App() {
         : activeCategory !== "all"
           ? activeCategory
           : categoryId;
+    animateLayout();
     if (editingPlaylistId) {
       setPlaylists(
         playlists.map((p) =>
@@ -1086,6 +1279,7 @@ export default function App() {
       "Delete",
       () => {
         triggerHaptic("error");
+        animateLayout();
         setPlaylists(playlists.filter((x) => x.id !== p.id));
         setNotes(
           notes.map((n) =>
@@ -1110,14 +1304,14 @@ export default function App() {
     ]);
   };
 
-  // Notes
   const handleSave = () => {
-    if (title.trim() === "") {
+    if (title.trim() === "" && content.trim() === "") {
       triggerHaptic("warning");
-      Alert.alert("Title Required", "Please add a title to your note.");
+      Alert.alert("Empty Note", "Please write something before saving.");
       return;
     }
     triggerHaptic("success");
+    animateLayout();
     const now = new Date().toISOString();
     if (editingId) {
       setNotes(
@@ -1125,7 +1319,7 @@ export default function App() {
           n.id === editingId
             ? {
                 ...n,
-                title,
+                title: title || "Untitled",
                 content,
                 colorId,
                 categoryId,
@@ -1139,7 +1333,7 @@ export default function App() {
       setNotes([
         {
           id: Date.now().toString(),
-          title,
+          title: title || "Untitled",
           content,
           colorId,
           categoryId,
@@ -1174,6 +1368,7 @@ export default function App() {
   };
   const moveToTrash = (id) => {
     triggerHaptic("warning");
+    animateLayout();
     const n = notes.find((x) => x.id === id);
     if (!n) return;
     setNotes(notes.filter((x) => x.id !== id));
@@ -1193,10 +1388,12 @@ export default function App() {
   };
   const togglePin = (id) => {
     triggerHaptic("light");
+    animateLayout();
     setNotes(notes.map((n) => (n.id === id ? { ...n, pinned: !n.pinned } : n)));
   };
   const restoreFromTrash = (id) => {
     triggerHaptic("success");
+    animateLayout();
     const item = trash.find((t) => t.id === id);
     if (!item) return;
     const { deletedAt, ...restored } = item;
@@ -1210,6 +1407,7 @@ export default function App() {
       "Delete",
       () => {
         triggerHaptic("error");
+        animateLayout();
         setTrash(trash.filter((t) => t.id !== id));
       },
     );
@@ -1221,6 +1419,7 @@ export default function App() {
       "Empty Trash",
       () => {
         triggerHaptic("error");
+        animateLayout();
         setTrash([]);
       },
     );
@@ -1232,6 +1431,7 @@ export default function App() {
       "Delete All",
       async () => {
         triggerHaptic("error");
+        animateLayout();
         setNotes([]);
         setTrash([]);
         setPlaylists([]);
@@ -1379,7 +1579,6 @@ export default function App() {
               onRightPress={emptyTrash}
               styles={s}
             />
-
             <FlatList
               data={trash}
               keyExtractor={(i) => i.id}
@@ -1393,9 +1592,10 @@ export default function App() {
                   </Text>
                 ) : null
               }
-              renderItem={({ item }) => (
+              renderItem={({ item, index }) => (
                 <NoteRow
                   item={item}
+                  index={index}
                   styles={s}
                   fontScale={fontScale}
                   onPress={() => {}}
@@ -1408,23 +1608,17 @@ export default function App() {
               )}
               ListEmptyComponent={
                 <View style={s.emptyContainer}>
-                  <GlassCard style={s.emptyIconCircle} intensity={60} bordered>
-                    <Ionicons
-                      name="trash-outline"
-                      size={40}
-                      color={GLASS.textTertiary}
-                    />
-                  </GlassCard>
-                  <Text style={s.emptyTitle}>Trash is Empty</Text>
-                  <Text style={s.emptySubtitle}>
-                    Deleted notes will appear here
-                  </Text>
+                  <Ionicons
+                    name="trash-outline"
+                    size={84}
+                    color="rgba(96,165,250,0.16)"
+                  />
+                  <Text style={s.emptyText}>Trash is empty</Text>
                 </View>
               }
             />
           </SafeAreaView>
         </View>
-
         <ConfirmDialog
           dialog={confirmDialog}
           onCancel={closeConfirm}
@@ -1461,7 +1655,6 @@ export default function App() {
               }}
               styles={s}
             />
-
             <ScrollView
               contentContainerStyle={{ paddingBottom: 40 }}
               showsVerticalScrollIndicator={false}
@@ -1501,6 +1694,7 @@ export default function App() {
                           style={[s.segmentBtn, active && s.segmentBtnActive]}
                           onPress={() => {
                             triggerHaptic("light");
+                            animateLayout();
                             setFontSize(opt.id);
                           }}
                           activeOpacity={0.7}
@@ -1626,17 +1820,15 @@ export default function App() {
                   icon="information-circle"
                   iconColor="#38BDF8"
                   label="Version"
-                  value="2.0.0"
+                  value="2.1.0"
                   styles={s}
                   isLast
                 />
               </GlassCard>
-
               <Text style={s.madeWith}>Crafted with 💙 · Astra Glass</Text>
             </ScrollView>
           </SafeAreaView>
         </View>
-
         <OptionPickerModal
           visible={pickerVisible}
           title={pickerConfig.title}
@@ -1646,7 +1838,6 @@ export default function App() {
           onClose={() => setPickerVisible(false)}
           styles={s}
         />
-
         <ConfirmDialog
           dialog={confirmDialog}
           onCancel={closeConfirm}
@@ -1670,7 +1861,6 @@ export default function App() {
           <View style={s.glowOrb1} />
           <View style={s.glowOrb2} />
           <View style={s.glowOrb3} />
-
           <SafeAreaView style={s.safeArea}>
             <StatusBar
               barStyle="light-content"
@@ -1691,21 +1881,21 @@ export default function App() {
                   <Ionicons name="grid-outline" size={19} color="#FFFFFF" />
                 </GlassCard>
               </TouchableOpacity>
-
               <SegmentedControl
                 mode={filterMode}
                 onChange={(m) => {
+                  animateLayout();
                   setFilterMode(m);
                   setActivePlaylist("all");
                   if (m === "notes") setActiveCategory("all");
                 }}
                 styles={s}
               />
-
               <TouchableOpacity
                 style={s.topBarBtn}
                 onPress={() => {
                   triggerHaptic("light");
+                  animateLayout();
                   setViewMode(viewMode === "list" ? "grid" : "list");
                 }}
                 activeOpacity={0.7}
@@ -1840,9 +2030,10 @@ export default function App() {
                 renderSectionHeader={({ section: { title } }) => (
                   <Text style={s.sectionTitle}>{title.toUpperCase()}</Text>
                 )}
-                renderItem={({ item }) => (
+                renderItem={({ item, index }) => (
                   <NoteRow
                     item={item}
+                    index={index}
                     styles={s}
                     fontScale={fontScale}
                     onPress={() => openEdit(item)}
@@ -1854,35 +2045,12 @@ export default function App() {
                 )}
                 ListEmptyComponent={
                   !loading ? (
-                    <View style={s.emptyContainer}>
-                      <GlassCard
-                        style={s.emptyIconCircle}
-                        intensity={60}
-                        bordered
-                      >
-                        <Ionicons
-                          name={search ? "search-outline" : "sparkles-outline"}
-                          size={40}
-                          color={GLASS.textTertiary}
-                        />
-                      </GlassCard>
-                      <Text style={s.emptyTitle}>
-                        {search
-                          ? "No Results"
-                          : filterMode === "tasks"
-                            ? "No Tasks Yet"
-                            : activePlaylist !== "all"
-                              ? "No Notes Here"
-                              : "Your Canvas is Empty"}
-                      </Text>
-                      <Text style={s.emptySubtitle}>
-                        {search
-                          ? "Try a different search term"
-                          : activePlaylist !== "all"
-                            ? "Add notes or switch playlist"
-                            : "Tap the pencil button to get started"}
-                      </Text>
-                    </View>
+                    <EmptyState
+                      search={search}
+                      filterMode={filterMode}
+                      activePlaylist={activePlaylist}
+                      styles={s}
+                    />
                   ) : null
                 }
               />
@@ -1911,27 +2079,12 @@ export default function App() {
                   />
                 )}
                 ListEmptyComponent={
-                  <View style={s.emptyContainer}>
-                    <GlassCard
-                      style={s.emptyIconCircle}
-                      intensity={60}
-                      bordered
-                    >
-                      <Ionicons
-                        name={search ? "search-outline" : "sparkles-outline"}
-                        size={40}
-                        color={GLASS.textTertiary}
-                      />
-                    </GlassCard>
-                    <Text style={s.emptyTitle}>
-                      {search ? "No Results" : "Your Canvas is Empty"}
-                    </Text>
-                    <Text style={s.emptySubtitle}>
-                      {search
-                        ? "Try a different search term"
-                        : "Tap the pencil button to get started"}
-                    </Text>
-                  </View>
+                  <EmptyState
+                    search={search}
+                    filterMode={filterMode}
+                    activePlaylist={activePlaylist}
+                    styles={s}
+                  />
                 }
               />
             )}
@@ -1953,7 +2106,7 @@ export default function App() {
         <Modal
           visible={showCategoryModal}
           transparent
-          animationType="fade"
+          animationType="slide"
           onRequestClose={() => setShowCategoryModal(false)}
         >
           <Pressable
@@ -1973,7 +2126,6 @@ export default function App() {
                 >
                   <Text style={s.modalSheetTitle}>Categories</Text>
                   <Text style={s.modalSheetSubtitle}>Organize your notes</Text>
-
                   <View style={s.modalGroupCard}>
                     {CATEGORIES.map((cat, idx) => {
                       const active =
@@ -1985,6 +2137,7 @@ export default function App() {
                           style={[s.modalRow, !isLast && s.modalRowBorder]}
                           onPress={() => {
                             triggerHaptic("light");
+                            animateLayout();
                             setFilterMode("notes");
                             setActiveCategory(cat.id);
                             setActivePlaylist("all");
@@ -2026,7 +2179,6 @@ export default function App() {
                       );
                     })}
                   </View>
-
                   <TouchableOpacity
                     style={[
                       s.modalRow,
@@ -2072,7 +2224,7 @@ export default function App() {
         <Modal
           visible={showPlaylistModal}
           transparent
-          animationType="fade"
+          animationType="slide"
           onRequestClose={() => setShowPlaylistModal(false)}
         >
           <Pressable
@@ -2095,7 +2247,6 @@ export default function App() {
                   <Text style={s.modalSheetSubtitle}>
                     Organize your notes into playlists
                   </Text>
-
                   <View style={s.inputGlassWrap}>
                     <TextInput
                       style={s.playlistInput}
@@ -2108,7 +2259,6 @@ export default function App() {
                       maxLength={30}
                     />
                   </View>
-
                   <Text
                     style={[
                       s.groupedHeader,
@@ -2152,7 +2302,6 @@ export default function App() {
                       </TouchableOpacity>
                     ))}
                   </View>
-
                   <View style={s.playlistModalActions}>
                     <TouchableOpacity
                       style={s.modalCancelBtn}
@@ -2212,7 +2361,6 @@ export default function App() {
         />
         <View style={s.glowOrb1} />
         <View style={s.glowOrb2} />
-
         <SafeAreaView style={s.safeArea}>
           <StatusBar
             barStyle="light-content"
@@ -2346,7 +2494,6 @@ export default function App() {
                       })}
                     </ScrollView>
                   </View>
-
                   <View style={s.toolbarSection}>
                     <Text style={s.toolbarLabel}>PLAYLIST</Text>
                     <ScrollView
@@ -2449,7 +2596,6 @@ export default function App() {
                       </TouchableOpacity>
                     </ScrollView>
                   </View>
-
                   <View style={s.toolbarSection}>
                     <Text style={s.toolbarLabel}>COLOR</Text>
                     <View style={s.editorColorRow}>
@@ -2499,7 +2645,7 @@ export default function App() {
       <Modal
         visible={showPlaylistModal}
         transparent
-        animationType="fade"
+        animationType="slide"
         onRequestClose={() => setShowPlaylistModal(false)}
       >
         <Pressable
@@ -2522,7 +2668,6 @@ export default function App() {
                 <Text style={s.modalSheetSubtitle}>
                   Organize your notes into playlists
                 </Text>
-
                 <View style={s.inputGlassWrap}>
                   <TextInput
                     style={s.playlistInput}
@@ -2535,7 +2680,6 @@ export default function App() {
                     maxLength={30}
                   />
                 </View>
-
                 <Text
                   style={[
                     s.groupedHeader,
@@ -2575,7 +2719,6 @@ export default function App() {
                     </TouchableOpacity>
                   ))}
                 </View>
-
                 <View style={s.playlistModalActions}>
                   <TouchableOpacity
                     style={s.modalCancelBtn}
@@ -2705,7 +2848,23 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     alignSelf: "center",
   },
-  segmentInner: { flexDirection: "row", padding: 3, gap: 2 },
+  segmentInner: {
+    flexDirection: "row",
+    padding: 3,
+    gap: 0,
+    position: "relative",
+    overflow: "hidden",
+    borderRadius: 11,
+  },
+  segmentSlider: {
+    position: "absolute",
+    top: 3,
+    bottom: 3,
+    left: 3,
+    width: 108,
+    borderRadius: 9,
+    overflow: "hidden",
+  },
   segment: {
     flex: 1,
     paddingVertical: 7,
@@ -2713,8 +2872,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     overflow: "hidden",
+    zIndex: 2,
   },
-  segmentActive: {},
   segmentText: {
     fontSize: 13,
     fontWeight: "600",
@@ -2797,12 +2956,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     minHeight: 68,
   },
-  noteRowAccent: {
-    width: 3.5,
-    height: 32,
-    borderRadius: 2,
-    marginRight: 12,
-  },
+  noteRowAccent: { width: 3.5, height: 32, borderRadius: 2, marginRight: 12 },
   noteRowLeft: { flex: 1 },
   noteRowTitle: {
     fontWeight: "600",
@@ -2881,31 +3035,17 @@ const styles = StyleSheet.create({
 
   emptyContainer: {
     alignItems: "center",
-    paddingHorizontal: 40,
-    marginTop: 80,
-  },
-  emptyIconCircle: {
-    width: 96,
-    height: 96,
-    borderRadius: 48,
     justifyContent: "center",
-    alignItems: "center",
-    marginBottom: 22,
-    overflow: "hidden",
+    paddingHorizontal: 40,
+    marginTop: 120,
   },
-  emptyTitle: {
-    fontSize: 19,
-    fontWeight: "700",
-    color: "#FFFFFF",
-    letterSpacing: -0.4,
-    marginBottom: 6,
-  },
-  emptySubtitle: {
-    fontSize: 14,
+  emptyText: {
+    marginTop: 18,
+    fontSize: 15,
     color: GLASS.textTertiary,
-    textAlign: "center",
-    lineHeight: 20,
+    fontWeight: "400",
     letterSpacing: -0.1,
+    textAlign: "center",
   },
 
   fab: {
@@ -2919,9 +3059,9 @@ const styles = StyleSheet.create({
     elevation: 10,
   },
   fabInner: {
-    width: 58,
-    height: 58,
-    borderRadius: 29,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
     justifyContent: "center",
     alignItems: "center",
     borderWidth: 1,
@@ -3297,7 +3437,6 @@ const styles = StyleSheet.create({
     borderColor: "transparent",
   },
 
-  // ===== Confirm Dialog =====
   confirmOverlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.6)",
@@ -3312,10 +3451,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: GLASS.borderStrong,
   },
-  confirmContent: {
-    padding: 22,
-    alignItems: "center",
-  },
+  confirmContent: { padding: 22, alignItems: "center" },
   confirmIconWrap: {
     width: 54,
     height: 54,
@@ -3341,11 +3477,7 @@ const styles = StyleSheet.create({
     letterSpacing: -0.1,
     marginBottom: 22,
   },
-  confirmActions: {
-    flexDirection: "row",
-    gap: 10,
-    width: "100%",
-  },
+  confirmActions: { flexDirection: "row", gap: 10, width: "100%" },
   confirmBtn: {
     flex: 1,
     paddingVertical: 13,
